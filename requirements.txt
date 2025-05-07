@@ -1,0 +1,27 @@
+# Core
+openai
+python-dotenv
+
+# Voice transcription
+whisper
+faster-whisper
+ffmpeg-python
+
+# Audio handling
+numpy
+soundfile
+pydub
+
+# Call handling (for Twilio-based telephony)
+twilio
+
+# Web framework (for API callbacks)
+fastapi
+uvicorn
+
+# Text-to-speech (optional integrations)
+boto3  # (for Amazon Polly)
+
+# For chatbot dev/testing
+transformers
+torch
