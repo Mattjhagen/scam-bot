@@ -1,27 +1,42 @@
 # Core
-openai
-python-dotenv
+openai>=1.0.0
+python-dotenv>=1.0.0
 
 # Voice transcription
-whisper
-faster-whisper
-ffmpeg-python
+whisper>=1.0
+faster-whisper>=0.98
+ffmpeg-python>=0.2.0
+gTTS>=2.5.0
 
 # Audio handling
-numpy
-soundfile
-pydub
+numpy>=1.26.0
+soundfile>=0.12.0
+pydub>=0.25.0
 
 # Call handling (for Twilio-based telephony)
-twilio
+twilio>=9.0.0
 
 # Web framework (for API callbacks)
-fastapi
-uvicorn
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+python-multipart>=0.0.6  # for form data parsing in webhooks
+
+# Database
+sqlalchemy>=2.0.0
+alembic>=1.12.0
 
 # Text-to-speech (optional integrations)
-boto3  # (for Amazon Polly)
+boto3>=1.34.0  # for Amazon Polly
+aioboto3>=12.0.0  # async boto3 for Polly
 
 # For chatbot dev/testing
-transformers
-torch
+transformers>=4.34.0
+torch>=2.0.0
+
+# Utilities
+phonenumbers>=8.13.0  # phone number parsing/validation
+httpx>=0.25.0  # for async HTTP calls
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
