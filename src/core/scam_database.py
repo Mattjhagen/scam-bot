@@ -1,5 +1,5 @@
 import json
-import random
+import phonenumbers
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -23,9 +23,27 @@ SEED_DATA = [
 ]
 
 
+def normalize_phone_number(phone_number: str) -> str:
+    try:
+        parsed = phonenumbers.parse(phone_number, "US")
+        return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+    except Exception:
+        return phone_number.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+
+
 def get_scam_numbers_json_path() -> Path:
     from ..config import BASE_DIR_STR
     return Path(BASE_DIR_STR) / "src" / "data" / "scam_numbers.json"
+
+
+def validate_phone_number(phone_number: str) -> tuple[bool, Optional[str]]:
+    try:
+        parsed = phonenumbers.parse(phone_number, "US")
+        if not phonenumbers.is_possible_number(parsed):
+            return False, "Invalid phone number format"
+        return True, phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+    except Exception:
+        return False, "Invalid phone number format"
 
 
 def seed_database(db: Session) -> dict:
@@ -117,7 +135,7 @@ def detect_scam_from_text(text: str) -> tuple[bool, float, Optional[ScamType]]:
 
 
 def check_number_in_db(db: Session, phone_number: str) -> Optional[ScamNumber]:
-    normalized = phone_number.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+    normalized = normalize_phone_number(phone_number)
     return db.query(ScamNumber).filter(
         ScamNumber.phone_number == normalized,
         ScamNumber.is_blocked == True,
@@ -140,7 +158,7 @@ def detect_scam(db: Session, phone_number: str, transcript: str = "") -> tuple[b
 
 def add_scam_report(db: Session, phone_number: str, reported_by: str = None,
                     scam_type: ScamType = ScamType.GENERAL, notes: str = None) -> ScamNumber:
-    normalized = phone_number.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+    normalized = normalize_phone_number(phone_number)
     report = ScamReport(
         phone_number=normalized,
         reported_by=reported_by,

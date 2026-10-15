@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScamBot Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        header { background: #1e293b; padding: 20px 30px; border-bottom: 2px solid #3b82f6; }
+        header h1 { color: #3b82f6; font-size: 1.8em; }
+        .tabs { display: flex; gap: 4px; margin-bottom: 20px; background: #1e293b; padding: 4px; border-radius: 8px; }
+        .tab { padding: 12px 24px; background: #334155; border: none; color: #cbd5e1; cursor: pointer; border-radius: 6px; font-size: 14px; transition: all 0.2s; }
+        .tab:hover { background: #475569; }
+        .tab.active { background: #3b82f6; color: #0f172a; font-weight: 600; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .card { background: #1e293b; border-radius: 10px; padding: 20px; margin-bottom: 16px; border: 1px solid #334155; }
+        .card h2 { color: #3b82f6; margin-bottom: 16px; font-size: 1.2em; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid #334155; }
+        th { color: #94a3b8; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
+        td { color: #e2e8f0; }
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+        .badge-scam { background: #ef4444; color: #fff; }
+        .badge-safe { background: #22c55e; color: #0f172a; }
+        .badge-pending { background: #f59e0b; color: #0f172a; }
+        .badge-known { background: #ef4444; color: #fff; }
+        .btn { padding: 10px 20px; background: #3b82f6; color: #0f172a; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.2s; }
+        .btn:hover { background: #60a5fa; transform: translateY(-1px); }
+        .btn-danger { background: #ef4444; color: #fff; }
+        .btn-danger:hover { background: #f87171; }
+        .form-row { display: flex; gap: 12px; margin-bottom: 12px; }
+        .form-row input { flex: 1; padding: 10px 14px; border: 1px solid #334155; border-radius: 6px; background: #0f172a; color: #e2e8f0; font-size: 14px; }
+        .form-row input:focus { outline: none; border-color: #3b82f6; }
+        .form-row textarea { flex: 1; padding: 10px 14px; border: 1px solid #334155; border-radius: 6px; background: #0f172a; color: #e2e8f0; font-size: 14px; resize: vertical; min-height: 80px; }
+        .stat { text-align: center; padding: 16px; }
+        .stat .value { font-size: 2em; font-weight: 700; color: #3b82f6; }
+        .stat .label { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+        .transcript { background: #0f172a; border-radius: 8px; padding: 16px; font-family: 'Monaco', 'Fira Code', monospace; font-size: 13px; line-height: 1.6; max-height: 400px; overflow-y: auto; white-space: pre-wrap; }
+        .scammer { color: #ef4444; }
+        .ai { color: #3b82f6; }
+        .search-box { padding: 10px 14px; border: 1px solid #334155; border-radius: 6px; background: #0f172a; color: #e2e8f0; width: 300px; font-size: 14px; }
+        .toast { position: fixed; bottom: 20px; right: 20px; background: #1e293b; border: 1px solid #334155; padding: 16px 24px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+        .toast.success { border-left: 4px solid #22c55e; }
+        .toast.error { border-left: 4px solid #ef4444; }
+        .hidden { display: none; }
+        .empty-state { text-align: center; padding: 40px; color: #64748b; }
+        .confidence-bar { width: 60px; height: 8px; background: #334155; border-radius: 4px; overflow: hidden; display: inline-block; }
+        .confidence-fill { height: 100%; background: linear-gradient(90deg, #ef4444, #f59e0b, #22c55e); }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>ScamBot Dashboard</h1>
+            <p style="color: #64748b; margin-top: 4px;">Intercept scams, waste their time, collect evidence</p>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="tabs">
+            <div class="tab active" onclick="showTab('overview')">Overview</div>
+            <div class="tab" onclick="showTab('calls')">Call Records</div>
+            <div class="tab" onclick="showTab('scam-numbers')">Scam Numbers</div>
+            <div class="tab" onclick="showTab('report')">Report Scam Number</div>
+        </div>
+
+        <div id="overview" class="tab-content active">
+            <div style="display: flex; gap: 16px; margin-bottom: 24px;">
+                <div class="card" style="flex: 1;">
+                    <div class="stat">
+                        <div class="value" id="total-calls">0</div>
+                        <div class="label">Total Calls Intercepted</div>
+                    </div>
+                </div>
+                <div class="card" style="flex: 1;">
+                    <div class="stat">
+                        <div class="value" id="scam-calls">0</div>
+                        <div class="label">Scam Calls Detected</div>
+                    </div>
+                </div>
+                <div class="card" style="flex: 1;">
+                    <div class="stat">
+                        <div class="value" id="known-numbers">0</div>
+                        <div class="label">Known Scam Numbers</div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Recent Activity</h2>
+                <div id="recent-activity">
+                    <div class="empty-state">Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="calls" class="tab-content">
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h2>Call Records</h2>
+                    <input type="text" class="search-box" placeholder="Search calls..." onkeyup="filterCalls()">
+                </div>
+                <table id="calls-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>From</th>
+                            <th>Status</th>
+                            <th>Scam?</th>
+                            <th>Confidence</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="calls-body">
+                        <tr><td colspan="6" class="empty-state">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="scam-numbers" class="tab-content">
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h2>Known Scam Numbers</h2>
+                    <input type="text" class="search-box" placeholder="Search numbers..." onkeyup="filterScamNumbers()">
+                </div>
+                <table id="scam-numbers-table">
+                    <thead>
+                        <tr>
+                            <th>Phone Number</th>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Confidence</th>
+                            <th>Reports</th>
+                            <th>Last Seen</th>
+                        </tr>
+                    </thead>
+                    <tbody id="scam-numbers-body">
+                        <tr><td colspan="6" class="empty-state">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="report" class="tab-content">
+            <div class="card">
+                <h2>Report a Scam Number</h2>
+                <form id="report-form">
+                    <div class="form-row">
+                        <input type="tel" id="report-phone" placeholder="Phone Number (e.g. +15551234567)" required>
+                    </div>
+                    <div class="form-row">
+                        <select id="report-type" style="padding: 10px; border-radius: 6px; background: #0f172a; color: #e2e8f0; border: 1px solid #334155; width: 100%; font-size: 14px;">
+                            <option value="general">General Scam</option>
+                            <option value="tech_support">Tech Support</option>
+                            <option value="lottery">Lottery/Sweepstakes</option>
+                            <option value="government">Government Impersonation</option>
+                            <option value="bank_fraud">Bank Fraud</option>
+                            <option value="romance">Romance Scam</option>
+                            <option value="investment">Investment Scam</option>
+                            <option value="business_email">Business Email Compromise</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <textarea id="report-notes" placeholder="Additional notes (optional)"></textarea>
+                    </div>
+                    <button type="submit" class="btn">Submit Report</button>
+                </form>
+            </div>
+        </div>
+
+        <div id="call-modal" class="card" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: 800px; width: 90%; display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h2 id="modal-title">Call Details</h2>
+                <button onclick="closeModal()" style="background: none; border: none; color: #94a3b8; font-size: 20px; cursor: pointer;">&times;</button>
+            </div>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+    <div id="toast"></div>
+
+    <script>
+        async function api(path, options = {}) {
+            const response = await fetch(path, options);
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(text || response.statusText);
+            }
+            return response.json();
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast ' + type;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 3000);
+        }
+
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+            document.getElementById(tabName).classList.add('active');
+            event.currentTarget.classList.add('active');
+            if (tabName === 'calls') loadCalls();
+            if (tabName === 'scam-numbers') loadScamNumbers();
+            if (tabName === 'overview') loadOverview();
+        }
+
+        async function loadOverview() {
+            try {
+                const [calls, numbers] = await Promise.all([
+                    api('/api/calls'),
+                    api('/api/scam-numbers')
+                ]);
+                const scamCalls = calls.filter(c => c.scam_detected).length;
+                document.getElementById('total-calls').textContent = calls.length;
+                document.getElementById('scam-calls').textContent = scamCalls;
+                document.getElementById('known-numbers').textContent = numbers.length;
+
+                const activity = document.getElementById('recent-activity');
+                if (calls.length === 0) {
+                    activity.innerHTML = '<div class="empty-state">No calls yet.</div>';
+                } else {
+                    const recent = calls.slice(0, 5).map(c => {
+                        const badge = c.scam_detected
+                            ? '<span class="badge badge-scam">SCAM</span>'
+                            : '<span class="badge badge-safe">Safe</span>';
+                        const time = new Date(c.started_at).toLocaleString();
+                        return `<div style="padding: 10px 0; border-bottom: 1px solid #334155;">
+                            <div style="display: flex; justify-content: space-between;">
+                                <span>${time}</span>${badge}
+                            </div>
+                            <div style="color: #94a3b8; font-size: 13px; margin-top: 4px;">${c.from_number}</div>
+                        </div>`;
+                    }).join('');
+                    activity.innerHTML = recent;
+                }
+            } catch (err) {
+                showToast('Failed to load overview: ' + err.message, 'error');
+            }
+        }
+
+        let allCalls = [];
+
+        async function loadCalls() {
+            try {
+                allCalls = await api('/api/calls');
+                renderCalls(allCalls);
+            } catch (err) {
+                showToast('Failed to load calls: ' + err.message, 'error');
+            }
+        }
+
+        function renderCalls(calls) {
+            const tbody = document.getElementById('calls-body');
+            if (!calls.length) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No calls found.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = calls.map(c => {
+                const time = new Date(c.started_at).toLocaleString();
+                const badge = c.scam_detected
+                    ? '<span class="badge badge-scam">SCAM</span>'
+                    : '<span class="badge badge-safe">Safe</span>';
+                const conf = c.scam_confidence > 0 ? c.scam_confidence * 100 : 0;
+                const confBar = c.scam_confidence > 0
+                    ? `<div class="confidence-bar"><div class="confidence-fill" style="width:${conf}%"></div></div>`
+                    : '-';
+                return `<tr>
+                    <td>${time}</td>
+                    <td>${c.from_number}</td>
+                    <td>${c.status}</td>
+                    <td>${badge}</td>
+                    <td>${confBar}</td>
+                    <td><button class="btn" onclick="viewCall('${c.call_sid}')" style="padding: 6px 12px; font-size: 12px;">Details</button></td>
+                </tr>`;
+            }).join('');
+        }
+
+        function filterCalls() {
+            const q = document.querySelector('input[onkeyup="filterCalls()"]').value.toLowerCase();
+            const filtered = allCalls.filter(c =>
+                c.from_number.includes(q) || (c.transcript || '').toLowerCase().includes(q)
+            );
+            renderCalls(filtered);
+        }
+
+        async function viewCall(callSid) {
+            try {
+                const call = await api(`/api/calls/${callSid}`);
+                const modal = document.getElementById('call-modal');
+                document.getElementById('modal-title').textContent = `Call: ${call.from_number}`;
+                let body = `<div style="margin-bottom: 12px;">
+                    <span class="badge ${call.scam_detected ? 'badge-scam' : 'badge-safe'}">
+                        ${call.scam_detected ? 'SCAM DETECTED' : 'Safe'}
+                    </span>
+                    <span class="badge badge-pending">${call.scam_confidence > 0 ? (call.scam_confidence * 100).toFixed(0) + '% confidence' : 'No confidence data'}</span>
+                </div>`;
+                if (call.recording_url) {
+                    body += `<div style="margin-bottom: 12px;"><a href="${call.recording_url}" target="_blank" style="color: #3b82f6;">Download Recording</a></div>`;
+                }
+                body += '<h3 style="color: #94a3b8; margin: 12px 0 8px;">Transcript</h3>';
+                body += `<div class="transcript">${call.transcript || 'No transcript available'}</div>`;
+                document.getElementById('modal-body').innerHTML = body;
+                modal.style.display = 'block';
+            } catch (err) {
+                showToast('Failed to load call: ' + err.message, 'error');
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('call-modal').style.display = 'none';
+        }
+
+        let allScamNumbers = [];
+
+        async function loadScamNumbers() {
+            try {
+                allScamNumbers = await api('/api/scam-numbers');
+                renderScamNumbers(allScamNumbers);
+            } catch (err) {
+                showToast('Failed to load scam numbers: ' + err.message, 'error');
+            }
+        }
+
+        function renderScamNumbers(numbers) {
+            const tbody = document.getElementById('scam-numbers-body');
+            if (!numbers.length) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No scam numbers found.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = numbers.map(n => {
+                return `<tr>
+                    <td>${n.phone_number}</td>
+                    <td>${n.caller_name || '-'}</td>
+                    <td>${n.scam_type}</td>
+                    <td>${(n.confidence * 100).toFixed(0)}%</td>
+                    <td>${n.report_count}</td>
+                    <td>${new Date(n.last_seen).toLocaleDateString()}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function filterScamNumbers() {
+            const q = document.querySelector('input[onkeyup="filterScamNumbers()"]').value.toLowerCase();
+            const filtered = allScamNumbers.filter(n =>
+                n.phone_number.includes(q) || (n.caller_name || '').toLowerCase().includes(q) ||
+                n.scam_type.toLowerCase().includes(q)
+            );
+            renderScamNumbers(filtered);
+        }
+
+        document.getElementById('report-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const phone = document.getElementById('report-phone').value;
+            const type = document.getElementById('report-type').value;
+            const notes = document.getElementById('report-notes').value;
+            try {
+                await api('/api/scam-reports', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone_number: phone, scam_type: type, notes: notes || undefined })
+                });
+                showToast('Report submitted successfully!');
+                document.getElementById('report-form').reset();
+            } catch (err) {
+                showToast('Failed to submit: ' + err.message, 'error');
+            }
+        });
+
+        window.addEventListener('click', (e) => {
+            const modal = document.getElementById('call-modal');
+            if (e.target === modal) closeModal();
+            const toast = document.getElementById('toast');
+            if (e.target === toast) toast.classList.add('hidden');
+        });
+
+        loadOverview();
+    </script>
+</body>
+</html>

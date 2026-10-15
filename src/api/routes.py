@@ -1,17 +1,19 @@
 import base64
+import io
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect, status
-from fastapi.responses import Response
+from fastapi.responses import Response, PlainTextResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from twilio.twiml.voice_response import VoiceResponse
 
 from ..config import settings
 from ..core import scam_database
 from ..core.database import get_db, SessionLocal
-from ..core.models import CallRecord, CallStatus, ScamNumber, ScamReport, User
+from ..core.models import CallRecord, CallStatus, ScamNumber, ScamReport, User, ScamType
 from ..core.schemas import (
     ScamNumberResponse,
     ScamReportResponse,
@@ -317,3 +319,79 @@ async def get_call_detail(call_sid: str):
         }
     finally:
         db.close()
+
+
+@router.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "ScamBot", "version": "1.0.0"}
+
+
+@router.get("/api/scam-types")
+async def get_scam_types():
+    from ..core.models import ScamType as ST
+    return [{"value": t.value, "label": t.value.replace("_", " ").title()} for t in ST]
+
+
+@router.get("/api/calls/{call_sid}/export", response_class=PlainTextResponse)
+async def export_call_transcript(call_sid: str):
+    db = SessionLocal()
+    try:
+        record = db.query(CallRecord).filter_by(call_sid=call_sid).first()
+        if not record:
+            raise HTTPException(status_code=404, detail="Call not found")
+        lines = [
+            f"=== ScamBot Call Transcript ===",
+            f"Call SID: {record.call_sid}",
+            f"From: {record.from_number}",
+            f"To: {record.to_number or 'N/A'}",
+            f"Started: {record.started_at.isoformat() if record.started_at else 'N/A'}",
+            f"Ended: {record.ended_at.isoformat() if record.ended_at else 'N/A'}",
+            f"Scam Detected: {'Yes' if record.scam_detected else 'No'}",
+            f"Confidence: {record.scam_confidence:.0%}" if record.scam_confidence > 0 else "Confidence: N/A",
+            f"Recording: {record.recording_url or 'N/A'}",
+            "",
+            "=== Transcript ===",
+            record.transcript or "No transcript available",
+        ]
+        text = "\n".join(lines)
+        return Response(content=text, media_type="text/plain", headers={
+            "Content-Disposition": f"attachment; filename=scambot_transcript_{call_sid}.txt"
+        })
+    finally:
+        db.close()
+
+
+@router.post("/api/scam-numbers/bulk-import")
+async def bulk_import_scam_numbers(numbers: List[dict], db: Session = Depends(get_db)):
+    added = 0
+    errors = []
+    for entry in numbers:
+        try:
+            phone = scam_database.normalize_phone_number(entry["phone_number"])
+            existing = db.query(ScamNumber).filter_by(phone_number=phone).first()
+            if existing:
+                existing.report_count += 1
+                existing.last_seen = datetime.now(timezone.utc)
+                if entry.get("scam_type"):
+                    existing.scam_type = ScamType(entry["scam_type"])
+                if entry.get("confidence"):
+                    existing.confidence = entry["confidence"]
+                existing.metadata_json = existing.metadata_json or {}
+                existing.metadata_json.update(entry.get("metadata_json", {}))
+                db.add(existing)
+            else:
+                new_num = ScamNumber(
+                    phone_number=phone,
+                    caller_name=entry.get("caller_name"),
+                    scam_type=ScamType(entry.get("scam_type", "general")),
+                    notes=entry.get("notes"),
+                    confidence=entry.get("confidence", 0.5),
+                    is_blocked=entry.get("is_blocked", True),
+                    metadata_json=entry.get("metadata_json", {}),
+                )
+                db.add(new_num)
+                added += 1
+        except Exception as e:
+            errors.append({"entry": entry, "error": str(e)})
+    db.commit()
+    return {"added": added, "errors": errors}

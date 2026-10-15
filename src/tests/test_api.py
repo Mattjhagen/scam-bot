@@ -92,3 +92,42 @@ def test_list_calls_empty(client):
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
+
+
+def test_health_check(client):
+    response = client.get("/health")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "healthy"
+
+
+def test_get_scam_types(client):
+    response = client.get("/api/scam-types")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) > 0
+
+
+def test_export_call_transcript_not_found(client):
+    response = client.get("/api/calls/CA_NONEXISTENT/export")
+    assert response.status_code == 404
+
+
+def test_export_call_transcript(client):
+    client.post("/telephony/voice", data={"From": "+18002311500", "CallSid": "CA_EXPORT_TEST"})
+    response = client.get("/api/calls/CA_EXPORT_TEST/export")
+    assert response.status_code == 200
+    assert "ScamBot" in response.text
+    assert "+18002311500" in response.text
+
+
+def test_bulk_import_scam_numbers(client):
+    response = client.post("/api/scam-numbers/bulk-import", json=[
+        {"phone_number": "+15557654321", "scam_type": "tech_support", "caller_name": "Bulk Test"},
+        {"phone_number": "+15557654322", "scam_type": "lottery", "caller_name": "Bulk Test 2"},
+    ])
+    assert response.status_code == 200
+    data = response.json()
+    assert data["added"] == 2
+    assert len(data["errors"]) == 0

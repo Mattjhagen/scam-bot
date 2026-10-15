@@ -12,6 +12,8 @@ from .core import scam_database
 from .core.database import SessionLocal
 from .api.routes import router
 
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
@@ -38,9 +40,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.mount("/dashboard", StaticFiles(directory=STATIC_DIR, html=True), name="dashboard")
+
 app.include_router(router)
 
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
 @app.get("/")
 async def root():

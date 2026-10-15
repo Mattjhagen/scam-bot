@@ -2,89 +2,105 @@
 
 An autonomous system that intercepts incoming scam calls using an AI voice to waste scammer time, records calls for evidence, detects and blocks known scam numbers, and sends summaries to users.
 
-## How It Works
+## Architecture
 
 ```
-Incoming call → Twilio webhook → Scam number check + real-time transcription → AI persona engages scammer → Full call recorded → Transcript + recording sent to user via SMS
+Incoming call → Twilio IVR → Scam number check → Real-time Whisper transcription → GPT persona engages scammer → Full call recorded → Transcript + recording sent to user via SMS
 ```
 
-### Architecture
+### Project Structure
 
 ```
 src/
-├── main.py                    # FastAPI app entrypoint
-├── config.py                  # Settings / env loading
+├── main.py                    # FastAPI entry point (app + lifespan)
+├── config.py                  # Settings loaded from environment
 ├── api/
-│   └── routes.py              # Twilio webhook + REST API endpoints
+│   └── routes.py              # Twilio webhooks + REST API endpoints
 ├── core/
-│   ├── models.py              # SQLAlchemy models (ScamNumber, CallRecord, etc.)
-│   ├── database.py            # DB session, engine, init
+│   ├── models.py              # SQLAlchemy models (Base, ScamNumber, CallRecord, User...)
+│   ├── database.py            # Engine, session, init_db
 │   ├── schemas.py             # Pydantic request/response models
-│   ├── scam_database.py       # Scam number DB + content-based detection
-│   ├── tts_engine.py          # Text-to-speech (Polly + gTTS + caching)
-│   └── notifier.py            # SMS notifications with transcript summaries
+│   ├── scam_database.py       # Scam number DB, phone normalization, keyword detection
+│   ├── tts_engine.py          # Text-to-speech (Polly + gTTS with caching)
+│   └── notifier.py            # SMS notifications with AI-summarized transcripts
 ├── nlp/
-│   ├── transcribe_audio.py    # Whisper/faster-whisper transcription
-│   ├── generate_reply.py      # OpenAI GPT reply generation with personas
-│   └── __init__.py
+│   ├── transcribe_audio.py    # faster-whisper speech-to-text
+│   └── generate_reply.py      # GPT reply generation with 4 personas
 ├── telephony/
 │   ├── call_manager.py        # Twilio call/SMS/recording management
-│   └── media_stream.py        # WebSocket media stream (real-time transcription)
+│   └── media_stream.py        # WebSocket real-time audio streaming + processing
 ├── data/
-│   └── scam_numbers.json      # Seed known scam numbers
-└── tests/                     # pytest suite
+│   └── scam_numbers.json      # Seed known scam numbers (12 entries)
+├── static/
+│   └── index.html             # Web dashboard
+└── tests/                     # 40 tests across 3 test files
 ```
 
 ## Features
 
-- **Scam number directory** — SQLite database with 12 pre-seeded known scam numbers, plus user-reported entries
-- **Real-time scam detection** — Phone number lookup + keyword-based content analysis
-- **AI voice personas** — Confuses and wastes scammer time (CIA grandpa, eccentric grandma, confused tech guy, bureaucratic clerk)
-- **Full call recording** — All audio captured for evidence (banks, authorities)
-- **Automatic transcription** — Whisper/faster-whisper converts speech to text
-- **User notifications** — SMS summary with AI-generated recap sent after each call
-- **User reporting** — Anyone can submit scam numbers via API
-- **REST API** — Query scam numbers, call records, register users
+- **Scam database** — 12 pre-seeded known scam numbers, with user reporting and bulk import
+- **Phone number validation** — Uses `phonenumbers` library for normalization and validation
+- **Two-layer scam detection** — Phone number lookup + keyword-based content analysis (7 scam types)
+- **Real-time media streaming** — Twilio Media Streams WebSocket receives audio, transcribes with Whisper, generates GPT responses
+- **AI voice personas** — 4 configurable personas waste scammer time:
+  - Confused CIA Agent (default): rambling 80-year-old ex-agent
+  - Eccentric Grandma: hard of hearing, talks about her cats
+  - Confused Tech Guy: gives wrong tech advice
+  - Bureaucratic Clerk: demands forms and procedures
+- **Full call recording** — All calls recorded for evidence
+- **Automatic transcription** — Whisper converts speech to text in real-time
+- **User notifications** — AI-summarized transcript + recording URL sent via SMS
+- **Web dashboard** — View call records, transcripts, scam numbers, submit reports
+- **Export tools** — Download call transcripts as text for evidence submission
+- **Alembic migrations** — Database schema versioning
+- **Docker support** — Dockerfile + docker-compose for deployment
 
 ## Setup
 
 ```bash
-pip install -r requirements.txt
 cp .env.example .env
 # Edit .env with your Twilio, OpenAI, and AWS credentials
-uvicorn src.main:app --reload
+docker compose up --build
+```
+
+Or run locally:
+
+```bash
+pip install -r requirements.txt
+cp .env.example .env
+uvicorn src.main:app --reload --port 8000
 ```
 
 ## Twilio Configuration
 
 1. Buy a phone number on Twilio
-2. Set the **Voice & Fax** webhook URL to `https://your-domain.com/telephony/voice`
-3. Enable **Call Recording** and **Media Streams** in your Twilio console
-4. Set the media stream WebSocket URL to `wss://your-domain.com/telephony/media-stream`
-
-## Environment Variables
-
-| Variable | Required | Description |
-|---|---|---|
-| `TWILIO_ACCOUNT_SID` | Yes | Twilio account SID |
-| `TWILIO_AUTH_TOKEN` | Yes | Twilio auth token |
-| `TWILIO_PHONE_NUMBER` | Yes | Your Twilio phone number |
-| `PUBLIC_HOST` | Yes | Your public domain (no protocol) |
-| `OPENAI_API_KEY` | Yes | OpenAI API key for GPT replies |
-| `AWS_ACCESS_KEY_ID` | No | AWS credentials for Polly TTS |
-| `DATABASE_URL` | No | SQLite path (default: `sqlite:///./data/scam_bot.db`) |
+2. Set **Voice & Fax** webhook → `https://your-domain.com/telephony/voice`
+3. Enable **Media Streams** → `wss://your-domain.com/telephony/media-stream`
+4. Enable **Call Recording** with callback → `https://your-domain.com/telephony/recording-status`
+5. Set your domain in `PUBLIC_HOST` env var
 
 ## API Endpoints
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/telephony/voice` | Twilio voice webhook |
-| `GET` | `/telephony/media-stream` | WebSocket for media streaming |
-| `POST` | `/api/users` | Register a user |
-| `POST` | `/api/scam-reports` | Submit a scam number report |
-| `GET` | `/api/scam-numbers` | List known scam numbers |
+| `POST` | `/telephony/voice` | Twilio voice webhook (TwiML response) |
+| `GET` | `/telephony/media-stream` | WebSocket for real-time audio |
+| `POST` | `/telephony/recording-status` | Recording callback |
+| `POST` | `/telephony/call-status` | Call status callback |
+| `GET` | `/health` | Health check |
+| `GET` | `/api/scam-types` | List scam types |
+| `GET` | `/api/scam-numbers` | List known scam numbers (`?search=`, `?skip=`, `?limit=`) |
+| `POST` | `/api/scam-numbers/bulk-import` | Bulk import scam numbers |
+| `GET` | `/api/scam-numbers/{id}` | Get scam number detail |
+| `POST` | `/api/scam-reports` | Report a scam number |
 | `GET` | `/api/calls` | List call records |
 | `GET` | `/api/calls/{call_sid}` | Get call details |
+| `GET` | `/api/calls/{call_sid}/export` | Export transcript as text |
+| `POST` | `/api/users` | Register a user |
+
+## Web Dashboard
+
+Available at `/dashboard/` — a full single-page application for viewing call records, transcripts, searching scam numbers, and submitting reports.
 
 ## Testing
 

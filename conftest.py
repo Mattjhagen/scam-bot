@@ -20,12 +20,17 @@ def pytest_configure(config):
 
 
 def pytest_runtest_teardown(item, nextitem):
-    from src.core.models import User, CallRecord, ScamReport
+    from src.core.models import User, CallRecord, ScamReport, ScamNumber, Notification, UserNote
     db = SessionLocal()
     try:
+        db.query(UserNote).delete()
+        db.query(Notification).delete()
         db.query(CallRecord).delete()
         db.query(ScamReport).delete()
         db.query(User).delete()
+        db.query(ScamNumber).delete()
+        db.commit()
+        scam_database.seed_database(db)
         db.commit()
     finally:
         db.close()
