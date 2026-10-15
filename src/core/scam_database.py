@@ -20,6 +20,8 @@ SEED_DATA = [
     {"phone_number": "+18554764716", "caller_name": "Lottery Scam", "scam_type": "lottery", "confidence": 0.87, "notes": "Fake sweepstakes/lottery winner trap"},
     {"phone_number": "+18334352465", "caller_name": "Apple Scam", "scam_type": "tech_support", "confidence": 0.86, "notes": "Fake Apple support phishing"},
     {"phone_number": "+18775969950", "caller_name": "Amazon Scam", "scam_type": "tech_support", "confidence": 0.84, "notes": "Fake Amazon account support"},
+    {"phone_number": "+19015550199", "caller_name": "Debt Relief Scam", "scam_type": "general", "confidence": 0.80, "notes": "Fake debt relief/credit repair"},
+    {"phone_number": "+19035550177", "caller_name": "Grandparent Scam", "scam_type": "general", "confidence": 0.83, "notes": "Fake emergency wire transfer request"},
 ]
 
 
@@ -136,10 +138,17 @@ def detect_scam_from_text(text: str) -> tuple[bool, float, Optional[ScamType]]:
 
 def check_number_in_db(db: Session, phone_number: str) -> Optional[ScamNumber]:
     normalized = normalize_phone_number(phone_number)
-    return db.query(ScamNumber).filter(
+    entry = db.query(ScamNumber).filter(
         ScamNumber.phone_number == normalized,
-        ScamNumber.is_blocked == True,
     ).first()
+    if entry:
+        if entry.is_blocked:
+            return entry
+        if entry.report_count >= settings.SCAM_REPORT_THRESHOLD:
+            entry.is_blocked = True
+            db.commit()
+            return entry
+    return None
 
 
 def detect_scam(db: Session, phone_number: str, transcript: str = "") -> tuple[bool, float, Optional[ScamType], Optional[ScamNumber]]:
@@ -157,7 +166,7 @@ def detect_scam(db: Session, phone_number: str, transcript: str = "") -> tuple[b
 
 
 def add_scam_report(db: Session, phone_number: str, reported_by: str = None,
-                    scam_type: ScamType = ScamType.GENERAL, notes: str = None) -> ScamNumber:
+                    scam_type: ScamType = ScamType.GENERAL, notes: str = None) -> tuple[ScamNumber, ScamReport]:
     normalized = normalize_phone_number(phone_number)
     report = ScamReport(
         phone_number=normalized,
@@ -172,25 +181,25 @@ def add_scam_report(db: Session, phone_number: str, reported_by: str = None,
 
     existing = db.query(ScamNumber).filter_by(phone_number=normalized).first()
     if existing:
-        assert existing.id is not None
         existing.report_count += 1
         existing.last_seen = datetime.now(timezone.utc)
-        if not existing.is_blocked:
-            existing.is_blocked = True
         report.scam_number_rel_id = existing.id
+        if existing.report_count >= settings.SCAM_REPORT_THRESHOLD:
+            existing.is_blocked = True
+            existing.confidence = min(1.0, existing.confidence + 0.1)
         db.add(report)
         db.add(existing)
         db.commit()
         db.refresh(existing)
-        return existing
+        return existing, report
 
     new_entry = ScamNumber(
         phone_number=normalized,
         caller_name=None,
         scam_type=scam_type,
         notes=notes,
-        confidence=0.5,
-        is_blocked=True,
+        confidence=0.3,
+        is_blocked=False,
         report_count=1,
         metadata_json={"source": "user_report"},
     )
@@ -200,7 +209,7 @@ def add_scam_report(db: Session, phone_number: str, reported_by: str = None,
     report.scam_number_rel_id = new_entry.id
     db.add(report)
     db.commit()
-    return new_entry
+    return new_entry, report
 
 
 def create_or_update_call_record(db: Session, call_sid: str, from_number: str,
