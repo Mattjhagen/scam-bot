@@ -19,6 +19,7 @@ twilio>=9.0.0
 # Web framework (for API callbacks)
 fastapi>=0.100.0
 uvicorn[standard]>=0.23.0
+python-multipart>=0.0.6  # for form data parsing in webhooks
 
 # Database
 sqlalchemy>=2.0.0

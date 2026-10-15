@@ -58,8 +58,7 @@ async def test_synthesize_tts_to_mulaw_format():
             result = await synthesize_tts_to_mulaw("hello", output_file)
             assert isinstance(result, str)
             assert len(result) > 0
-            from src.core.tts_engine import _tts_cache
-            _tts_cache.clear()
+            clear_cache()
 
 
 def test_normalize_phone_number():
@@ -150,7 +149,7 @@ def test_bulk_import_updates_existing():
     with TestClient(app) as client:
         response = client.post("/api/scam-numbers/bulk-import", json=[
             {"phone_number": "+18002311500", "scam_type": "tech_support", "caller_name": "Updated Name", "confidence": 0.99},
-        ])
+        ], headers={"X-API-Key": "test-api-key"})
         assert response.status_code == 200
         data = response.json()
         assert data["added"] == 0
@@ -284,3 +283,76 @@ def test_report_confirmation_to_reporter():
         assert "+18002311500" not in args[0]
 
     settings.SEND_SMS_NOTES = orig_send
+
+
+def test_tts_cache_mulaw_not_confused_with_mp3():
+    import tempfile, base64
+    from pathlib import Path
+    from pydub import AudioSegment
+    from pydub.generators import Sine
+    from src.core.tts_engine import _cache_key, _cache_path, _get_cached, _get_cached_mulaw, clear_cache
+
+    clear_cache()
+
+    provider = "gtts"
+    voice_id = ""
+    key = _cache_key("collision_test", provider, voice_id)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mp3_path = _cache_path(key, "mp3")
+        Path(mp3_path).parent.mkdir(parents=True, exist_ok=True)
+        tone = Sine(440).to_audio_segment(duration=200)
+        tone.export(mp3_path, format="mp3")
+
+        assert _get_cached(key) == mp3_path
+        assert _get_cached_mulaw(key) is None
+
+        mulaw_path = _cache_path(key, "mulaw")
+        audio = AudioSegment.from_mp3(mp3_path)
+        audio = audio.set_frame_rate(8000).set_channels(1).set_sample_width(2)
+        import audioop
+        mulaw_data = audioop.lin2ulaw(audio.raw_data, 2)
+        Path(mulaw_path).write_bytes(mulaw_data)
+
+        mulaw_b64 = _get_cached_mulaw(key)
+        assert mulaw_b64 is not None
+
+        decoded = base64.b64decode(mulaw_b64)
+        assert decoded[:3] != b"\xff\xfb"  # not MP3 sync word
+        assert len(decoded) > 0
+
+        assert _get_cached(key) == mp3_path or _get_cached(key) == mulaw_path
+
+    clear_cache()
+
+
+def test_health_check_db_connectivity():
+    from fastapi.testclient import TestClient
+    from src.main import app
+
+    with TestClient(app) as client:
+        response = client.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["database"] == "ok"
+
+
+def test_health_check_db_unreachable(monkeypatch):
+    from fastapi.testclient import TestClient
+    from src.main import app
+    import src.api.routes as routes_mod
+
+    class FakeSession:
+        def execute(self, *args, **kwargs):
+            raise Exception("DB connection refused")
+        def close(self):
+            pass
+
+    monkeypatch.setattr(routes_mod, "SessionLocal", lambda: FakeSession())
+
+    with TestClient(app) as client:
+        response = client.get("/health")
+        assert response.status_code == 503
+        data = response.json()
+        assert data["status"] == "unhealthy"
+        assert data["database"] == "error"
