@@ -1,1 +1,14 @@
-venv\ 
+venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.env
+.env.local
+data/
+*.db
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.idea
+.vscode
