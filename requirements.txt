@@ -3,7 +3,6 @@ openai>=1.0.0
 python-dotenv>=1.0.0
 
 # Voice transcription
-whisper>=1.0
 faster-whisper>=0.98
 ffmpeg-python>=0.2.0
 gTTS>=2.5.0
@@ -26,12 +25,8 @@ sqlalchemy>=2.0.0
 alembic>=1.12.0
 
 # Text-to-speech (optional integrations)
-boto3>=1.34.0  # for Amazon Polly
-aioboto3>=12.0.0  # async boto3 for Polly
-
-# For chatbot dev/testing
-transformers>=4.34.0
-torch>=2.0.0
+boto3==1.34.50  # for Amazon Polly — pinned with aioboto3 to avoid backtracking
+aioboto3==12.4.0  # async boto3 for Polly
 
 # Utilities
 phonenumbers>=8.13.0  # phone number parsing/validation

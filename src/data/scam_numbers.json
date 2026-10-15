@@ -1,0 +1,14 @@
+[
+  {"phone_number": "+18002311500", "caller_name": "Fake Tech Support", "scam_type": "tech_support", "confidence": 0.95, "notes": "Common fake Microsoft support line"},
+  {"phone_number": "+18008769940", "caller_name": "IRS Scam", "scam_type": "government", "confidence": 0.92, "notes": "Fake IRS/SSC phishing line"},
+  {"phone_number": "+18006208900", "caller_name": "Credit Repair Scam", "scam_type": "general", "confidence": 0.88, "notes": "Credit repair fraud"},
+  {"phone_number": "+18007752385", "caller_name": "Fake Charity", "scam_type": "general", "confidence": 0.85, "notes": "Phony charity collection"},
+  {"phone_number": "+18333247300", "caller_name": "Social Security Scam", "scam_type": "government", "confidence": 0.90, "notes": "Fake SSA impersonation"},
+  {"phone_number": "+18888888888", "caller_name": "Tech Support Scam", "scam_type": "tech_support", "confidence": 0.93, "notes": "Fake Windows support number"},
+  {"phone_number": "+18448293949", "caller_name": "Bank Impersonation", "scam_type": "bank_fraud", "confidence": 0.89, "notes": "Fake bank fraud department"},
+  {"phone_number": "+18554764716", "caller_name": "Lottery Scam", "scam_type": "lottery", "confidence": 0.87, "notes": "Fake sweepstakes/lottery winner trap"},
+  {"phone_number": "+18334352465", "caller_name": "Apple Scam", "scam_type": "tech_support", "confidence": 0.86, "notes": "Fake Apple support phishing"},
+  {"phone_number": "+18775969950", "caller_name": "Amazon Scam", "scam_type": "tech_support", "confidence": 0.84, "notes": "Fake Amazon account support"},
+  {"phone_number": "+19015550199", "caller_name": "Debt Relief Scam", "scam_type": "general", "confidence": 0.80, "notes": "Fake debt relief/credit repair"},
+  {"phone_number": "+19035550177", "caller_name": "Grandparent Scam", "scam_type": "general", "confidence": 0.83, "notes": "Fake emergency wire transfer request"}
+]
