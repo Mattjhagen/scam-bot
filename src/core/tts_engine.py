@@ -1,12 +1,17 @@
 import asyncio
+import audioop
+import base64
 import hashlib
 import os
 from pathlib import Path
 from typing import Optional
 
 from gtts import gTTS
+from pydub import AudioSegment
 
 from ..config import settings, BASE_DIR_STR
+
+SAMPLE_RATE = 8000
 
 try:
     import aioboto3
@@ -106,3 +111,43 @@ def clear_cache():
     _tts_cache = {}
     for f in TTS_CACHE_DIR.iterdir():
         f.unlink()
+
+
+async def synthesize_tts_to_mulaw(text: str, output_file: str, persona: str = None) -> str:
+    provider = settings.TTS_PROVIDER
+    voice_id = settings.POLLY_VOICE_ID
+    key = _cache_key(text, provider, voice_id or "")
+    cached = _get_cached(key)
+    if cached:
+        with open(cached, "rb") as f:
+            mulaw_data = f.read()
+        return base64.b64encode(mulaw_data).decode()
+
+    Path(output_file).parent.mkdir(parents=True, exist_ok=True)
+    mp3_file = output_file.replace(".mulaw", ".mp3")
+    if provider == "polly" and _HAS_AIOBOTO3:
+        await _synthesize_tts_polly_async(text, mp3_file, voice_id)
+    else:
+        await asyncio.get_event_loop().run_in_executor(
+            None, synthesize_tts_gtts, text, mp3_file
+        )
+
+    audio = AudioSegment.from_mp3(mp3_file)
+    audio = audio.set_frame_rate(SAMPLE_RATE).set_channels(1).set_sample_width(2)
+    pcm_data = audio.raw_data
+    mulaw_data = audioop.lin2ulaw(pcm_data, 2)
+
+    _mulaw_cache_path = _cache_path(key, "mulaw")
+    Path(_mulaw_cache_path).write_bytes(mulaw_data)
+    _tts_cache[key] = _mulaw_cache_path
+
+    _cleanup_temp_file(mp3_file)
+    return base64.b64encode(mulaw_data).decode()
+
+
+def _cleanup_temp_file(filepath: str):
+    try:
+        if filepath and os.path.exists(filepath):
+            os.unlink(filepath)
+    except Exception:
+        pass

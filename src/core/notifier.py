@@ -12,6 +12,11 @@ async def send_call_notification(db_session, call_record: CallRecord, user: User
     if not settings.SEND_SMS_NOTES:
         return None
 
+    owner_phone = settings.OWNER_PHONE
+    if not owner_phone:
+        print(f"[NOTIFY] OWNER_PHONE not set, skipping notification for call {call_record.call_sid}")
+        return None
+
     summary = ""
     if call_record.transcript:
         scam_type_str = call_record.metadata_json.get("scam_type", "") if call_record.metadata_json else ""
@@ -19,15 +24,14 @@ async def send_call_notification(db_session, call_record: CallRecord, user: User
 
     body = _build_sms_body(call_record, summary)
 
-    phone = (user and user.phone_number) or call_record.from_number
     message_sid = await asyncio.get_event_loop().run_in_executor(
-        None, call_manager.send_sms, phone, body
+        None, call_manager.send_sms, owner_phone, body
     )
 
     notification = Notification(
         call_record_id=call_record.id,
-        user_id=user.id if user else None,
-        phone_number=phone,
+        user_id=None,
+        phone_number=owner_phone,
         channel="sms",
         status=NotificationStatus.SENT if message_sid else NotificationStatus.FAILED,
         content=body,
@@ -50,14 +54,25 @@ async def _safe_summarize(transcript: str, scam_type: str = None) -> str:
 
 
 def _build_sms_body(call_record: CallRecord, summary: str) -> str:
+    duration_str = "Unknown"
+    if call_record.started_at and call_record.ended_at:
+        delta = call_record.ended_at - call_record.started_at
+        secs = int(delta.total_seconds())
+        duration_str = f"{secs // 60}m {secs % 60}s"
+    elif call_record.ended_at and call_record.started_at:
+        duration_str = "Ended"
+
+    scam_type = "Unknown"
+    if call_record.metadata_json and call_record.metadata_json.get("scam_type"):
+        scam_type = call_record.metadata_json["scam_type"]
+
     lines = ["[ScamBot] Call Summary"]
-    scam_type = call_record.metadata_json.get("scam_type", "Unknown") if call_record.metadata_json else "Unknown"
     lines.append(f"Scammer: {call_record.from_number}")
     lines.append(f"Scam type: {scam_type}")
     lines.append(f"Detected: {'Yes' if call_record.scam_detected else 'No'}")
     if call_record.scam_confidence > 0:
         lines.append(f"Confidence: {call_record.scam_confidence:.0%}")
-    lines.append(f"Duration: {call_record.started_at}")
+    lines.append(f"Duration: {duration_str}")
     lines.append("")
     if summary:
         lines.append(summary[:1000])
@@ -70,22 +85,17 @@ async def notify_user_after_call(db_session, call_sid: str):
     record = db_session.query(CallRecord).filter_by(call_sid=call_sid).first()
     if not record:
         return None
-
-    user = db_session.query(User).filter_by(phone_number=record.from_number).first()
-    if not user:
-        user_match = scam_database.check_number_in_db(db_session, record.from_number)
-        if user_match and user_match.metadata_json and user_match.metadata_json.get("user_phone"):
-            user = db_session.query(User).filter_by(phone_number=user_match.metadata_json["user_phone"]).first()
-
-    return await send_call_notification(db_session, record, user)
+    return await send_call_notification(db_session, record, None)
 
 
-async def send_scam_report_confirmation(phone_number: str, report_id: int):
+async def send_scam_report_confirmation(reported_by: str, report_id: int, phone_number: str):
     if not settings.SEND_SMS_NOTES:
         return None
+    if not reported_by:
+        return None
     body = (
-        f"ScamBot: Thanks for your report. Your report #{report_id} for {phone_number} "
-        f"has been recorded and will be reviewed. Stay safe!"
+        f"ScamBot: Thanks for your report #{report_id} for {phone_number}. "
+        f"It has been recorded and will be reviewed. Stay safe!"
     )
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, call_manager.send_sms, phone_number, body)
+    return await loop.run_in_executor(None, call_manager.send_sms, reported_by, body)
