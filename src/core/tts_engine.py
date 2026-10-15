@@ -34,11 +34,20 @@ def _cache_path(key: str, ext: str = "mp3") -> str:
     return str(TTS_CACHE_DIR / f"{key}.{ext}")
 
 
-def _get_cached(key: str):
+_TTS_CACHE_EXTS = ("mp3", "wav", "mulaw")
+
+
+def _get_cached(key: str, ext: str = None):
+    if ext:
+        path = _cache_path(key, ext)
+        if os.path.exists(path):
+            _tts_cache[key] = path
+            return path
+        return None
     if key in _tts_cache:
         return _tts_cache[key]
-    for ext in ("mp3", "wav"):
-        path = _cache_path(key, ext)
+    for e in _TTS_CACHE_EXTS:
+        path = _cache_path(key, e)
         if os.path.exists(path):
             _tts_cache[key] = path
             return path
@@ -117,11 +126,10 @@ async def synthesize_tts_to_mulaw(text: str, output_file: str, persona: str = No
     provider = settings.TTS_PROVIDER
     voice_id = settings.POLLY_VOICE_ID
     key = _cache_key(text, provider, voice_id or "")
-    cached = _get_cached(key)
-    if cached:
-        with open(cached, "rb") as f:
-            mulaw_data = f.read()
-        return base64.b64encode(mulaw_data).decode()
+
+    cached_b64 = _get_cached_mulaw(key)
+    if cached_b64:
+        return cached_b64
 
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
     mp3_file = output_file.replace(".mulaw", ".mp3")
@@ -139,10 +147,24 @@ async def synthesize_tts_to_mulaw(text: str, output_file: str, persona: str = No
 
     _mulaw_cache_path = _cache_path(key, "mulaw")
     Path(_mulaw_cache_path).write_bytes(mulaw_data)
-    _tts_cache[key] = _mulaw_cache_path
+    _tts_cache[f"{key}:mulaw"] = base64.b64encode(mulaw_data).decode()
 
     _cleanup_temp_file(mp3_file)
     return base64.b64encode(mulaw_data).decode()
+
+
+def _get_cached_mulaw(key: str) -> Optional[str]:
+    cached_b64 = _tts_cache.get(f"{key}:mulaw")
+    if cached_b64 is not None:
+        return cached_b64
+    mulaw_path = _cache_path(key, "mulaw")
+    if os.path.exists(mulaw_path):
+        with open(mulaw_path, "rb") as f:
+            mulaw_data = f.read()
+        b64 = base64.b64encode(mulaw_data).decode()
+        _tts_cache[f"{key}:mulaw"] = b64
+        return b64
+    return None
 
 
 def _cleanup_temp_file(filepath: str):

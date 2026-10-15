@@ -25,6 +25,7 @@ from ..core.schemas import (
     UserCreate,
     UserResponse,
 )
+from ..core.rate_limiter import _report_limiter
 from ..telephony.media_stream import (
     create_session,
     end_session,
@@ -274,7 +275,16 @@ async def register_user(user_in: UserCreate, db: Session = Depends(get_db),
 
 
 @router.post("/api/scam-reports", response_model=ScamReportResponse, status_code=status.HTTP_201_CREATED)
-async def submit_scam_report(report_in: ScamReportCreate, db: Session = Depends(get_db)):
+async def submit_scam_report(request: Request, report_in: ScamReportCreate, db: Session = Depends(get_db)):
+    client_ip = request.client.host if request.client else "unknown"
+    allowed, retry_after = _report_limiter.check(client_ip)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit exceeded. Try again in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
     phone = scam_database.normalize_phone_number(report_in.phone_number)
     scam_number, report = scam_database.add_scam_report(
         db, report_in.phone_number, report_in.reported_by,
@@ -452,7 +462,20 @@ async def bulk_import_scam_numbers(numbers: List[dict], db: Session = Depends(ge
 
 @router.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "ScamBot", "version": "1.0.0"}
+    from sqlalchemy import text
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+        db_status = "ok"
+    except Exception as e:
+        return Response(
+            content=json.dumps({"status": "unhealthy", "database": "error", "error": str(e)}),
+            media_type="application/json",
+            status_code=503,
+        )
+    finally:
+        db.close()
+    return {"status": "healthy", "service": "ScamBot", "version": "1.0.0", "database": db_status}
 
 
 @router.get("/api/scam-types")
