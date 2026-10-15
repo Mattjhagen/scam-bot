@@ -4,6 +4,10 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///./data/test_scam_bot.db")
+os.environ.setdefault("ENV", "testing")
+os.environ.setdefault("DEBUG", "false")
+os.environ.setdefault("SEND_SMS_NOTES", "false")
+os.environ.setdefault("RECORD_CALLS", "false")
 
 from src.core.database import init_db, SessionLocal, engine, Base
 from src.core import scam_database

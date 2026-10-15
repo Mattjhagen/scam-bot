@@ -86,19 +86,21 @@ def test_detect_scam_unknown_number_with_text(_setup_db):
 def test_add_scam_report(_setup_db):
     db = _setup_db
     before = db.query(ScamReport).count()
-    entry = scam_database.add_scam_report(
+    entry, report = scam_database.add_scam_report(
         db, "+15551234567", "user@example.com", "bank_fraud", "Tried to get my credit card info"
     )
     after = db.query(ScamReport).count()
     assert after == before + 1
     assert entry.phone_number == "+15551234567"
-    assert entry.is_blocked is True
+    assert entry.is_blocked is False  # New reports start unblocked
+    assert report.is_verified is False
 
 
 def test_add_scam_report_updates_existing(_setup_db):
     db = _setup_db
-    entry = scam_database.add_scam_report(db, "+18002311500", "user@example.com", "tech_support", "Extra note")
+    entry, report = scam_database.add_scam_report(db, "+18002311500", "user@example.com", "tech_support", "Extra note")
     assert entry.report_count > 0
+    assert entry.is_blocked is True  # Existing seed entry is already blocked
 
 
 def test_create_call_record(_setup_db):

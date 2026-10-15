@@ -13,6 +13,7 @@ from sqlalchemy import (
     String,
     Text,
 )
+from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import declarative_base, relationship
 
 
@@ -60,7 +61,7 @@ class ScamNumber(Base):
     first_seen = Column(DateTime, default=_utcnow)
     last_seen = Column(DateTime, default=_utcnow)
     report_count = Column(Integer, default=0)
-    metadata_json = Column(JSON, default=dict)
+    metadata_json = Column(MutableDict.as_mutable(JSON), default=dict)
 
     reports = relationship("ScamReport", back_populates="scam_number_rel", cascade="all, delete-orphan")
     call_records = relationship("CallRecord", back_populates="scam_number_rel", cascade="all, delete-orphan")
@@ -107,7 +108,7 @@ class CallRecord(Base):
     transcript = Column(Text, nullable=True)
     scam_detected = Column(Boolean, default=False)
     scam_confidence = Column(Float, default=0.0)
-    metadata_json = Column(JSON, default=dict)
+    metadata_json = Column(MutableDict.as_mutable(JSON), default=dict)
 
     scam_number_rel = relationship("ScamNumber", back_populates="call_records")
     scam_number_rel_id = Column(Integer, ForeignKey("scam_numbers.id"), nullable=True)
