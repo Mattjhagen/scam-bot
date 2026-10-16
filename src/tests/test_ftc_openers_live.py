@@ -10,10 +10,11 @@ Runnable as:
     GROQ_LIVE_TEST=1 GROQ_API_KEY=sk-... pytest src/tests/test_ftc_openers_live.py -s
 
 Optional audio path:
-    Set FTC_AUDIO_DIR to a directory containing MP3 files named by opener id
-    (e.g. ssa_suspended.mp3). Each MP3 is transcribed with the real
-    transcribe_audio path and the transcription is used as the scammer turn.
-    Skipped entirely when FTC_AUDIO_DIR is unset.
+    Set FTC_AUDIO_DIR to a directory containing MP3 files. Each MP3 is
+    transcribed with the real transcribe_audio path and the transcription is
+    used as the scammer turn. Filename candidates per opener: the opener id
+    (e.g. ssa_suspended.mp3) and the real FTC filename (e.g.
+    SSA-5-Suspended.mp3). Skipped entirely when FTC_AUDIO_DIR is unset.
 """
 
 import json
@@ -110,11 +111,22 @@ def _scammer_text_for(opener, use_audio, audio_dir):
     transcription from FTC_AUDIO_DIR."""
     opener_id = opener["id"]
     if use_audio and audio_dir:
-        # Try common MP3 filename patterns
+        # Try common MP3 filename patterns: opener-id names first, then
+        # the real FTC filenames Matty downloaded.
+        real_filenames = {
+            "ssa_suspended": "SSA-5-Suspended.mp3",
+            "apple_icloud": "Apple-iCloud-Account-Breached_Scam-Call.mp3",
+            "utility_rebate": "Utility-2-ElectricRebateCheck-P1.mp3",
+            "irs_settlement": "IRS-1-TaxReduction-IRSSuspendedCollection.mp3",
+            "irr_reduction": "Credit-Card-IRR-2-LegalFinancialAdviser.mp3",
+        }
         candidates = [
             Path(audio_dir) / f"{opener_id}.mp3",
             Path(audio_dir) / f"{opener_id}.MP3",
         ]
+        real_name = real_filenames.get(opener_id)
+        if real_name:
+            candidates.append(Path(audio_dir) / real_name)
         audio_file = None
         for c in candidates:
             if c.exists():
@@ -143,7 +155,7 @@ def test_ftc_openers_live():
         pytest.skip("GROQ_API_KEY not set")
 
     groq_base_url = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
-    groq_model = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+    groq_model = os.getenv("GROQ_MODEL", settings.OPENAI_MODEL)
 
     # Temporarily override settings for the live call
     orig_base_url = settings.OPENAI_BASE_URL
