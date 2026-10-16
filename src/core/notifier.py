@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import datetime, timezone
 
 from ..config import settings
@@ -7,6 +8,8 @@ from ..core import scam_database
 from ..nlp import summarize_transcript
 from ..telephony.call_manager import call_manager
 
+logger = logging.getLogger("scambot")
+
 
 async def send_call_notification(db_session, call_record: CallRecord, user: User = None):
     if not settings.SEND_SMS_NOTES:
@@ -14,7 +17,7 @@ async def send_call_notification(db_session, call_record: CallRecord, user: User
 
     owner_phone = settings.OWNER_PHONE
     if not owner_phone:
-        print(f"[NOTIFY] OWNER_PHONE not set, skipping notification for call {call_record.call_sid}")
+        logger.info("[NOTIFY] OWNER_PHONE not set, skipping notification for call %s", call_record.call_sid)
         return None
 
     summary = ""

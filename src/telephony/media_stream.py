@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import logging
 import os
 import wave
 from collections import deque
@@ -16,6 +17,8 @@ from ..core.models import CallRecord
 from ..nlp import generate_reply_async, transcribe_audio_async
 from ..core.tts_engine import synthesize_tts_async, synthesize_tts_to_mulaw
 from ..core import scam_database
+
+logger = logging.getLogger("scambot")
 
 SAMPLE_RATE = 8000
 SAMPLE_WIDTH = 2  # 16-bit PCM
@@ -150,7 +153,7 @@ async def process_audio_chunk(session: StreamSession):
             return
 
         session.transcript_so_far += f"\nScammer: {transcription}"
-        print(f"[STREAM] {session.from_number}: {transcription}")
+        logger.info("[STREAM] %s: %s", session.from_number, transcription)
 
         from ..core.database import SessionLocal
         db = SessionLocal()
@@ -165,6 +168,8 @@ async def process_audio_chunk(session: StreamSession):
                     record.scam_confidence = max(
                         record.scam_confidence or 0, confidence
                     )
+                    if record.metadata_json is None:
+                        record.metadata_json = {}
                     record.metadata_json["scam_type"] = scam_type.value if scam_type else ""
             if record:
                 existing = record.transcript or ""
@@ -176,7 +181,7 @@ async def process_audio_chunk(session: StreamSession):
             db.close()
 
     except Exception as e:
-        print(f"[STREAM] Error processing audio: {e}")
+        logger.error("[STREAM] Error processing audio: %s", e)
     finally:
         _cleanup_chunk_file(audio_file)
         session.is_processing = False
@@ -203,7 +208,7 @@ async def _generate_and_queue_response(session: StreamSession, transcription: st
         print(f"[STREAM] AI reply: {reply_text[:80]}...")
 
     except Exception as e:
-        print(f"[STREAM] Error generating reply: {e}")
+        logger.error("[STREAM] Error generating reply: %s", e)
 
 
 async def _check_db_async(phone_number: str):

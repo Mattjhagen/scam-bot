@@ -110,9 +110,23 @@ async def synthesize_tts_async(text: str, output_file: str, provider: str = None
 
 
 def synthesize_tts(text: str, output_file: str, provider: str = None, voice_id: str = None) -> str:
-    return asyncio.get_event_loop().run_until_complete(
-        synthesize_tts_async(text, output_file, provider, voice_id)
-    )
+    try:
+        asyncio.get_running_loop()
+        in_async = True
+    except RuntimeError:
+        in_async = False
+
+    if in_async:
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(
+                asyncio.run,
+                synthesize_tts_async(text, output_file, provider, voice_id),
+            )
+            return future.result()
+
+    return asyncio.run(synthesize_tts_async(text, output_file, provider, voice_id))
 
 
 def clear_cache():

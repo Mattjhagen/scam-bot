@@ -1,9 +1,12 @@
+import logging
 import os
 import sys
 from functools import lru_cache
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+logger = logging.getLogger("scambot")
 
 _BASE_DIR = Path(__file__).resolve().parent.parent
 BASE_DIR_STR = str(_BASE_DIR)
@@ -28,6 +31,7 @@ class _Settings:
         # OpenAI
         self.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
         self.OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        self.OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
         # AWS (for Polly TTS and S3 recording storage)
         self.AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "")
@@ -77,14 +81,28 @@ settings = get_settings()
 
 
 def validate_startup():
+    errors = []
     if not settings.TWILIO_ACCOUNT_SID or not settings.TWILIO_AUTH_TOKEN:
-        print("[ERROR] TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN must be set in .env")
-        sys.exit(1)
+        errors.append("TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN must be set in .env")
     if not settings.OPENAI_API_KEY:
-        print("[ERROR] OPENAI_API_KEY must be set in .env")
-        sys.exit(1)
-    if not settings.PUBLIC_HOST and (settings.RECORD_CALLS):
-        print("[ERROR] PUBLIC_HOST must be set when RECORD_CALLS=true")
-        sys.exit(1)
+        errors.append("OPENAI_API_KEY must be set in .env")
+    if not settings.PUBLIC_HOST and settings.RECORD_CALLS:
+        errors.append("PUBLIC_HOST must be set when RECORD_CALLS=true")
     if not settings.OWNER_PHONE:
-        print("[WARN] OWNER_PHONE is not set — call notifications will be skipped")
+        logger.warning("OWNER_PHONE is not set — call notifications will be skipped")
+    try:
+        float(settings.MIN_SCAM_CONFIDENCE)
+    except (TypeError, ValueError):
+        errors.append("MIN_SCAM_CONFIDENCE must be a valid float")
+    try:
+        int(settings.SCAM_REPORT_THRESHOLD)
+    except (TypeError, ValueError):
+        errors.append("SCAM_REPORT_THRESHOLD must be a valid integer")
+    try:
+        int(settings.RECORDING_RETENTION_DAYS)
+    except (TypeError, ValueError):
+        errors.append("RECORDING_RETENTION_DAYS must be a valid integer")
+    if errors:
+        for error in errors:
+            logger.error("[STARTUP] %s", error)
+        sys.exit(1)

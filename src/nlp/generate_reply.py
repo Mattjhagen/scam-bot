@@ -76,7 +76,7 @@ def generate_reply(scammer_text: str, persona_name: str = None, conversation_his
 
     client = _get_client()
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=settings.OPENAI_MODEL,
         messages=messages,
         temperature=0.95,
         max_tokens=200,
@@ -95,7 +95,7 @@ async def generate_reply_async(scammer_text: str, persona_name: str = None, conv
 
     client = _get_async_client()
     response = await client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=settings.OPENAI_MODEL,
         messages=messages,
         temperature=0.95,
         max_tokens=200,
@@ -112,7 +112,7 @@ def summarize_transcript(transcript: str, scam_type: str = None) -> str:
     )
     client = _get_client()
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=settings.OPENAI_MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.3,
         max_tokens=300,

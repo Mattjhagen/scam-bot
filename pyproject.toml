@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scambot"
+version = "1.0.0"
+description = "AI-powered scam call interception and evidence collection"
+requires-python = ">=3.9"
+dependencies = [
+    "openai>=1.0.0",
+    "python-dotenv>=1.0.0",
+    "faster-whisper>=0.98",
+    "ffmpeg-python>=0.2.0",
+    "gTTS>=2.5.0",
+    "numpy>=1.26.0",
+    "soundfile>=0.12.0",
+    "pydub>=0.25.0",
+    "twilio>=9.0.0",
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+    "python-multipart>=0.0.6",
+    "sqlalchemy>=2.0.0",
+    "alembic>=1.12.0",
+    "boto3==1.34.50",
+    "aioboto3==12.4.0",
+    "phonenumbers>=8.13.0",
+    "httpx>=0.25.0",
+    "redis>=5.0.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["src/tests"]
+python_files = ["test_*.py"]

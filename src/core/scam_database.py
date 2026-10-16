@@ -142,6 +142,7 @@ def check_number_in_db(db: Session, phone_number: str) -> Optional[ScamNumber]:
         ScamNumber.phone_number == normalized,
     ).first()
     if entry:
+        entry.last_seen = datetime.now(timezone.utc)
         if entry.is_blocked:
             return entry
         if entry.report_count >= settings.SCAM_REPORT_THRESHOLD:

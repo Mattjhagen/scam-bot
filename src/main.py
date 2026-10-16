@@ -1,3 +1,4 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -13,17 +14,24 @@ from .api.routes import router
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
+logging.basicConfig(
+    level=logging.INFO if not settings.DEBUG else logging.DEBUG,
+    format="%(asctime)s %(levelname)s [scambot] %(name)s: %(message)s",
+)
+logger = logging.getLogger("scambot")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if settings.ENV == "production":
         from .config import validate_startup
+
         validate_startup()
     init_db()
     db = SessionLocal()
     try:
         result = scam_database.seed_database(db)
-        print(f"[STARTUP] Seed: {result}")
+        logger.info("[STARTUP] Seed: %s", result)
     finally:
         db.close()
     yield
@@ -34,9 +42,11 @@ app = FastAPI(
     description="AI-powered scam call interception and evidence collection",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url=None if settings.ENV == "production" else "/docs",
+    redoc_url=None if settings.ENV == "production" else "/redoc",
 )
 
-allowed_origins = ["https://localhost:8000"]
+allowed_origins = ["http://localhost:8000"]
 if settings.PUBLIC_HOST:
     allowed_origins.append(f"https://{settings.PUBLIC_HOST}")
     allowed_origins.append(f"http://{settings.PUBLIC_HOST}")

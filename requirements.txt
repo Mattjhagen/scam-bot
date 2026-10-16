@@ -35,3 +35,6 @@ httpx>=0.25.0  # for async HTTP calls
 # Testing
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
+
+# Redis (shared rate limiting across workers/instances)
+redis>=5.0.0

@@ -1,6 +1,8 @@
 from pathlib import Path
 from typing import Optional
 
+import asyncio
+
 from faster_whisper import WhisperModel
 
 from ..config import settings
@@ -21,4 +23,5 @@ def transcribe_audio(file_path: str) -> str:
     return " ".join(seg.text for seg in segments).strip()
 
 async def transcribe_audio_async(file_path: str) -> str:
-    return transcribe_audio(file_path)
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, transcribe_audio, file_path)

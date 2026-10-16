@@ -26,5 +26,7 @@ def get_db() -> Session:
 
 def init_db():
     Path(settings.RECORDING_DIR).mkdir(parents=True, exist_ok=True)
-    Path(Path(settings.DATABASE_URL.replace("sqlite:///", "")).parent).mkdir(parents=True, exist_ok=True)
+    if settings.DATABASE_URL.startswith("sqlite"):
+        db_path = settings.DATABASE_URL.replace("sqlite:///", "")
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)

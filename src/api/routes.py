@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,6 +27,8 @@ from ..core.schemas import (
     UserResponse,
 )
 from ..core.rate_limiter import _report_limiter
+
+logger = logging.getLogger("scambot")
 from ..telephony.media_stream import (
     create_session,
     end_session,
@@ -80,6 +83,8 @@ async def voice_webhook(request: Request):
         if is_scam and db_match:
             record.scam_detected = True
             record.scam_confidence = confidence
+            if record.metadata_json is None:
+                record.metadata_json = {}
             record.metadata_json["scam_type"] = scam_type.value if scam_type else ""
             record.metadata_json["known_scam"] = True
             db.commit()
@@ -252,7 +257,7 @@ async def websocket_media_stream(websocket: WebSocket):
         end_session(stream_sid)
         _ws_connections.pop(stream_sid, None)
     except Exception as e:
-        print(f"[WS] Error: {e}")
+        logger.error("[WS] Error: %s", e)
         end_session(stream_sid)
         _ws_connections.pop(stream_sid, None)
         await websocket.close()
@@ -285,8 +290,7 @@ async def submit_scam_report(request: Request, report_in: ScamReportCreate, db: 
             headers={"Retry-After": str(retry_after)},
         )
 
-    phone = scam_database.normalize_phone_number(report_in.phone_number)
-    scam_number, report = scam_database.add_scam_report(
+    _, report = scam_database.add_scam_report(
         db, report_in.phone_number, report_in.reported_by,
         report_in.scam_type, report_in.notes,
     )
