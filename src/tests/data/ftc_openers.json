@@ -1,0 +1,27 @@
+[
+  {
+    "id": "ssa_suspended",
+    "scam_type": "government",
+    "opener_text": "We will be suspending your social security number because we found some suspicious activities on your social security. If you want more information about this case, press one. Thank you."
+  },
+  {
+    "id": "apple_icloud",
+    "scam_type": "tech_support",
+    "opener_text": "Before using any devices or going online, please contact Apple Support Advisor. Press 1 to connect to Apple Support Advisor. Press 2 listen to this again. Thank you."
+  },
+  {
+    "id": "utility_rebate",
+    "scam_type": "utility",
+    "opener_text": "Hello, this is an apology call from your electric utility. You've got overcharged by your third party supplier. You will be receiving a rebate check along with a 30% discount on your electric and gas bill. Please press one to get your rebate check."
+  },
+  {
+    "id": "irs_settlement",
+    "scam_type": "government",
+    "opener_text": "Hello, I am an Artificial Intelligence Notification Bot. The purpose of this call is to make you aware that a recent lawsuit settlement now requires the IRS to settle all old tax debt that any US residents currently have. This means you do not need to pay back your past due taxes as they are temporarily non-collectable and can be forced into a settlement on your behalf. Using our automated approval technology, you are now able to obtain enrollment information based on your current situation. To use your AI automation and find the program you are approved."
+  },
+  {
+    "id": "irr_reduction",
+    "scam_type": "bank_fraud",
+    "opener_text": "Thanks to your good pain and history and good credit score, you have been qualified finally for an interest rate reduction between 0 to 5%. Several attempts were made to reach you, this is your final courtesy call before we are unable to lower your interest rates. So, press one now."
+  }
+]
