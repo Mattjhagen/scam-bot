@@ -20,6 +20,11 @@ from ..core import scam_database
 
 logger = logging.getLogger("scambot")
 
+SCAMMER_OPENER = (
+    "Hello, this is fraud watch. Due to increased computer-related frauds, we've made "
+    "some very important changes to our policies, and I want to brief you on the changes."
+)
+
 SAMPLE_RATE = 8000
 SAMPLE_WIDTH = 2  # 16-bit PCM
 CHANNELS = 1
@@ -122,6 +127,17 @@ def create_session(call_sid: str, stream_sid: str, from_number: str, to_number: 
 
 def end_session(stream_sid: str):
     _sessions.pop(stream_sid, None)
+
+
+async def queue_scammer_opener(session: StreamSession) -> None:
+    """Speak-first: synthesize Beat 1 opener and queue it for immediate playback."""
+    try:
+        output_file = session.get_audio_file("scammer_opener")
+        mulaw_b64 = await synthesize_tts_to_mulaw(SCAMMER_OPENER, output_file, "fraud_watch_scammer")
+        session.response_queue.append(mulaw_b64)
+        logger.info("[TEST MODE] Scammer opener queued for stream %s", session.stream_sid)
+    except Exception as e:
+        logger.error("[TEST MODE] Failed to queue scammer opener: %s", e)
 
 
 async def handle_media_chunk(session: StreamSession, ulaw_data: bytes):

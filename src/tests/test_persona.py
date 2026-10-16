@@ -9,6 +9,7 @@ Runnable as: pytest src/tests/test_persona.py -s
 """
 
 import re
+import os
 import sys
 import time
 from unittest.mock import patch, MagicMock
@@ -224,3 +225,76 @@ def test_persona_harness(mock_openai):
     assert stall_rate >= 0.75, f"Stall rate too low: {stall_rate:.0%}"
     assert persona_rate >= 0.75, f"In-persona rate too low: {persona_rate:.0%}"
     assert short_rate >= 0.75, f"Under-2-sentences rate too low: {short_rate:.0%}"
+
+
+LIVE_TURN4_SCAMMER = (
+    "They will be giving you a new security code. For me to give you a security code, I "
+    "just need to ensure you are the authorized cardholder. Can you confirm your card "
+    "with me? Which card are you going to be using — your Visa, your Mastercard?"
+)
+
+
+@pytest.mark.skipif(
+    os.getenv("GROQ_LIVE_TEST") != "1",
+    reason="Set GROQ_LIVE_TEST=1 and GROQ_API_KEY to run the live Groq test",
+)
+def test_live_groq_elderly_cardholder_turn4():
+    """REAL generate_reply call against Groq for scammer turn 4.
+
+    Skipped unless GROQ_LIVE_TEST=1. Makes a real LLM call with the
+    elderly-cardholder persona and asserts: 1-2 sentences, no card number,
+    no security code, no confirmation of being the cardholder.
+    """
+    from src.nlp.generate_reply import generate_reply
+
+    groq_api_key = os.getenv("GROQ_API_KEY")
+    if not groq_api_key:
+        pytest.skip("GROQ_API_KEY not set")
+
+    # Point the OpenAI-compatible client at Groq
+    groq_base_url = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+    groq_model = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+
+    # Temporarily override settings for the live call
+    orig_base_url = settings.OPENAI_BASE_URL
+    orig_model = settings.OPENAI_MODEL
+    orig_api_key = settings.OPENAI_API_KEY
+    settings.OPENAI_BASE_URL = groq_base_url
+    settings.OPENAI_MODEL = groq_model
+    settings.OPENAI_API_KEY = groq_api_key
+
+    # Clear the cached clients so they get recreated with new settings
+    generate_reply.__globals__["_get_client"].cache_clear()
+    generate_reply.__globals__["_get_async_client"].cache_clear()
+
+    try:
+        t0 = time.perf_counter()
+        reply = generate_reply(
+            LIVE_TURN4_SCAMMER,
+            persona_name="elderly_cardholder",
+            conversation_history=[],
+        )
+        latency_ms = (time.perf_counter() - t0) * 1000
+    finally:
+        settings.OPENAI_BASE_URL = orig_base_url
+        settings.OPENAI_MODEL = orig_model
+        settings.OPENAI_API_KEY = orig_api_key
+        generate_reply.__globals__["_get_client"].cache_clear()
+        generate_reply.__globals__["_get_async_client"].cache_clear()
+
+    print("\n" + "=" * 70)
+    print("LIVE GROQ TEST — Elderly Cardholder, Turn 4")
+    print("=" * 70)
+    print(f"Model:        {groq_model}")
+    print(f"Latency:      {latency_ms:.0f}ms")
+    print(f"Reply:        {reply}")
+    print("=" * 70)
+
+    # Assertions
+    sentence_count = _count_sentences(reply)
+    assert 1 <= sentence_count <= 2, (
+        f"Reply must be 1-2 sentences, got {sentence_count}: {reply!r}"
+    )
+    assert not _leaks_info(reply), f"Reply leaks info: {reply!r}"
+    assert _stalls(reply), f"Reply does not stall: {reply!r}"
+
