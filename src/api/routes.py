@@ -229,6 +229,12 @@ async def websocket_media_stream(websocket: WebSocket):
                 if settings.RECORD_CALLS:
                     Path(settings.RECORDING_DIR).mkdir(parents=True, exist_ok=True)
 
+                # Test mode: scammer speaks first (Beat 1 opener)
+                if settings.SCAMBOT_TEST_MODE == "scammer":
+                    from ..telephony.media_stream import queue_scammer_opener
+
+                    await queue_scammer_opener(session)
+
             elif event == "media":
                 if not stream_sid:
                     continue

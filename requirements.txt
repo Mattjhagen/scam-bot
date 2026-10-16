@@ -25,8 +25,11 @@ sqlalchemy>=2.0.0
 alembic>=1.12.0
 
 # Text-to-speech (optional integrations)
-
-# For chatbot dev/testing
+# Kokoro-82M is local, free, CPU-friendly. torch is CPU-only (no CUDA build).
+kokoro
+torch>=2.0,<2.9  # CPU-only from PyPI; no CUDA index used
+piper-tts
+huggingface-hub==1.16.1
 
 # Utilities
 phonenumbers>=8.13.0  # phone number parsing/validation
@@ -36,8 +39,6 @@ httpx>=0.25.0  # for async HTTP calls
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
 av==14.0.0
-piper-tts
-huggingface-hub==1.16.1
 
 # Redis (shared rate limiting across workers/instances)
 redis>=5.0.0

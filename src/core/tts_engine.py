@@ -165,6 +165,11 @@ def synthesize_tts_piper(text: str, output_file: str) -> str:
     return output_file
 
 
+def _kokoro_lang_code(voice_id: str) -> str:
+    """Derive Kokoro language code from voice prefix: 'b' -> British, 'a' -> American."""
+    return "b" if voice_id and voice_id.startswith("b") else "a"
+
+
 def _get_kokoro_pipeline():
     """Lazy-load Kokoro pipeline. Falls back to Piper if unavailable."""
     global _kokoro_pipeline, _kokoro_model, _kokoro_voice_pack
@@ -174,11 +179,15 @@ def _get_kokoro_pipeline():
         raise RuntimeError("kokoro is not installed")
     try:
         import torch
+
+        voice_id = os.getenv("KOKORO_VOICE", "bm_george")
         _kokoro_model = KModel()
         _kokoro_model.eval()
-        _kokoro_pipeline = KPipeline(lang_code="a", model=_kokoro_model)
-        # Default natural American female voice
-        _kokoro_voice_pack = os.getenv("KOKORO_VOICE", "af_heart")
+        _kokoro_pipeline = KPipeline(
+            lang_code=_kokoro_lang_code(voice_id), model=_kokoro_model
+        )
+        # Default voice: bm_george (British male "George")
+        _kokoro_voice_pack = voice_id
     except Exception as exc:
         logger.warning("Kokoro failed to load (%s), falling back to Piper", exc)
         _kokoro_pipeline = None
@@ -198,15 +207,22 @@ def synthesize_tts_kokoro(text: str, output_file: str, voice_id: str = None) -> 
         # Kokoro not installed — fall back to Piper
         return synthesize_tts_piper(text, output_file)
 
-    voice_id = voice_id or os.getenv("KOKORO_VOICE", "af_heart")
+    voice_id = voice_id or os.getenv("KOKORO_VOICE", "bm_george")
     import torch
+    import numpy as np
 
+    segments = []
     with torch.inference_mode():
         for _, _, audio in pipeline(
             text, voice=voice_id, speed=1.0, split_pattern=r"\n+"
         ):
-            audio_np = audio.cpu().numpy()
-            break  # Kokoro yields one segment for short text; take first
+            segments.append(audio.cpu().numpy())
+
+    if not segments:
+        raise RuntimeError("Kokoro produced no audio segments")
+
+    # Accumulate ALL yielded segments into one audio array (fix truncation bug)
+    audio_np = np.concatenate(segments)
 
     # Convert to 16-bit PCM WAV at 8kHz
     pcm16 = (audio_np * 32767).astype("<i2").tobytes()

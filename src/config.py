@@ -50,8 +50,11 @@ class _Settings:
         self.TTS_PROVIDER = os.getenv("TTS_PROVIDER", "kokoro")
         self.ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
         self.ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "")
-        self.KOKORO_VOICE = os.getenv("KOKORO_VOICE", "af_heart")
+        self.KOKORO_VOICE = os.getenv("KOKORO_VOICE", "bm_george")
         self.ENABLE_LOCAL_TTS = os.getenv("ENABLE_LOCAL_TTS", "false").lower() == "true"
+
+        # Test mode (lab only, off by default)
+        self.SCAMBOT_TEST_MODE = os.getenv("SCAMBOT_TEST_MODE", "victim")
 
         # Recording
         self.RECORD_CALLS = os.getenv("RECORD_CALLS", "true").lower() == "true"
