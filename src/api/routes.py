@@ -50,7 +50,10 @@ def _validate_twilio_request(request: Request, form_data: dict) -> bool:
         return True
     validator = RequestValidator(settings.TWILIO_AUTH_TOKEN)
     signature = request.headers.get("X-Twilio-Signature", "")
-    url = str(request.url)
+    if settings.PUBLIC_HOST:
+        url = f"https://{settings.PUBLIC_HOST}{request.url.path}"
+    else:
+        url = str(request.url)
     form = {k: v for k, v in form_data.items() if isinstance(v, str)}
     return validator.validate(url, form, signature)
 
@@ -111,7 +114,8 @@ async def voice_webhook(request: Request):
 
         if settings.PUBLIC_HOST:
             stream_url = f"wss://{settings.PUBLIC_HOST}/telephony/media-stream"
-            resp.stream(
+            connect = resp.connect()
+            connect.stream(
                 url=stream_url,
                 track="inbound_track",
                 status_callback=f"https://{settings.PUBLIC_HOST}/telephony/stream-status",
@@ -212,10 +216,12 @@ async def websocket_media_stream(websocket: WebSocket):
             event = msg.get("event", "")
 
             if event == "start":
-                stream_sid = msg.get("stream", {}).get("sid", "")
-                call_sid = msg.get("call_sid", "")
-                from_number = msg.get("from", "")
-                to_number = msg.get("to", "")
+                start = msg.get("start", {})
+                stream_sid = msg.get("streamSid") or start.get("streamSid", "")
+                call_sid = start.get("callSid", "")
+                custom = start.get("customParameters", {}) or {}
+                from_number = custom.get("from", "")
+                to_number = custom.get("to", "")
 
                 session = create_session(call_sid, stream_sid, from_number, to_number)
                 _ws_connections[stream_sid] = websocket
@@ -238,11 +244,14 @@ async def websocket_media_stream(websocket: WebSocket):
                     if session.response_queue:
                         mulaw_b64 = await drain_response_queue(session)
                         if mulaw_b64:
-                            await websocket.send_json({
-                                "event": "media",
-                                "stream_sid": stream_sid,
-                                "media": {"payload": mulaw_b64},
-                            })
+                            mulaw_bytes = base64.b64decode(mulaw_b64)
+                            for i in range(0, len(mulaw_bytes), 160):
+                                chunk = base64.b64encode(mulaw_bytes[i:i + 160]).decode()
+                                await websocket.send_json({
+                                    "event": "media",
+                                    "streamSid": stream_sid,
+                                    "media": {"payload": chunk},
+                                })
 
             elif event == "stop":
                 session = get_session(stream_sid)

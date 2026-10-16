@@ -2,7 +2,11 @@ import asyncio
 import audioop
 import base64
 import hashlib
+import io
+import json
 import os
+import urllib.request
+import wave
 from pathlib import Path
 from typing import Optional
 
@@ -18,6 +22,15 @@ try:
     _HAS_AIOBOTO3 = True
 except ImportError:
     _HAS_AIOBOTO3 = False
+
+try:
+    from piper import PiperVoice
+    _HAS_PIPER = True
+except ImportError:
+    PiperVoice = None
+    _HAS_PIPER = False
+
+_piper_voice = None
 
 _tts_cache: dict[str, str] = {}
 
@@ -60,6 +73,30 @@ def synthesize_tts_gtts(text: str, output_file: str) -> str:
     return output_file
 
 
+def synthesize_tts_elevenlabs(text: str, output_file: str, voice_id: str = None) -> str:
+    voice_id = voice_id or settings.ELEVENLABS_VOICE_ID
+    api_key = settings.ELEVENLABS_API_KEY
+    if not api_key:
+        raise ValueError("ELEVENLABS_API_KEY is not set")
+    if not voice_id:
+        raise ValueError("ELEVENLABS_VOICE_ID is not set")
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+    payload = json.dumps({
+        "text": text,
+        "model_id": "eleven_turbo_v2_5",
+        "voice_settings": {"stability": 0.5, "similarity_boost": 0.75},
+    }).encode()
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={"xi-api-key": api_key, "Content-Type": "application/json", "Accept": "audio/mpeg"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        Path(output_file).write_bytes(resp.read())
+    return output_file
+
+
 async def _synthesize_tts_polly_async(text: str, output_file: str, voice_id: str = None) -> str:
     if not _HAS_AIOBOTO3:
         return await asyncio.get_event_loop().run_in_executor(None, synthesize_tts_gtts, text, output_file)
@@ -87,6 +124,33 @@ def synthesize_tts_polly(text: str, output_file: str, voice_id: str = None) -> s
     return loop.run_until_complete(_synthesize_tts_polly_async(text, output_file, voice_id))
 
 
+def _get_piper_voice():
+    global _piper_voice
+    if _piper_voice is None:
+        if not _HAS_PIPER:
+            raise RuntimeError("piper-tts is not installed")
+        model_path = os.getenv("PIPER_MODEL_PATH", "/app/data/piper/en_US-lessac-medium.onnx")
+        _piper_voice = PiperVoice.load(model_path, config_path=model_path + ".json")
+    return _piper_voice
+
+
+def synthesize_tts_piper(text: str, output_file: str) -> str:
+    """Synthesize speech with local Piper TTS, writing a mono WAV to output_file."""
+    if not text or not text.strip():
+        raise ValueError("No text to speak")
+    voice = _get_piper_voice()
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(voice.config.sample_rate)
+        for chunk in voice.synthesize(text):
+            wf.writeframes(chunk.audio_int16_bytes)
+    Path(output_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(output_file).write_bytes(buf.getvalue())
+    return output_file
+
+
 async def synthesize_tts_async(text: str, output_file: str, provider: str = None, voice_id: str = None) -> str:
     provider = provider or settings.TTS_PROVIDER
     key = _cache_key(text, provider, voice_id or "")
@@ -97,7 +161,15 @@ async def synthesize_tts_async(text: str, output_file: str, provider: str = None
 
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
 
-    if provider == "polly" and _HAS_AIOBOTO3:
+    if provider == "elevenlabs":
+        result = await asyncio.get_event_loop().run_in_executor(
+            None, synthesize_tts_elevenlabs, text, output_file, voice_id
+        )
+    elif provider == "piper":
+        result = await asyncio.get_event_loop().run_in_executor(
+            None, synthesize_tts_piper, text, output_file
+        )
+    elif provider == "polly" and _HAS_AIOBOTO3:
         result = await _synthesize_tts_polly_async(text, output_file, voice_id)
     else:
         result = synthesize_tts_gtts(text, output_file)
@@ -138,7 +210,7 @@ def clear_cache():
 
 async def synthesize_tts_to_mulaw(text: str, output_file: str, persona: str = None) -> str:
     provider = settings.TTS_PROVIDER
-    voice_id = settings.POLLY_VOICE_ID
+    voice_id = settings.ELEVENLABS_VOICE_ID if provider == "elevenlabs" else settings.POLLY_VOICE_ID
     key = _cache_key(text, provider, voice_id or "")
 
     cached_b64 = _get_cached_mulaw(key)
@@ -147,7 +219,25 @@ async def synthesize_tts_to_mulaw(text: str, output_file: str, persona: str = No
 
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
     mp3_file = output_file.replace(".mulaw", ".mp3")
-    if provider == "polly" and _HAS_AIOBOTO3:
+    if provider == "piper":
+        wav_file = output_file.replace(".mulaw", ".wav")
+        await asyncio.get_event_loop().run_in_executor(
+            None, synthesize_tts_piper, text, wav_file
+        )
+        audio = AudioSegment.from_wav(wav_file)
+        audio = audio.set_frame_rate(SAMPLE_RATE).set_channels(1).set_sample_width(2)
+        pcm_data = audio.raw_data
+        mulaw_data = audioop.lin2ulaw(pcm_data, 2)
+        _mulaw_cache_path = _cache_path(key, "mulaw")
+        Path(_mulaw_cache_path).write_bytes(mulaw_data)
+        _tts_cache[f"{key}:mulaw"] = base64.b64encode(mulaw_data).decode()
+        _cleanup_temp_file(wav_file)
+        return base64.b64encode(mulaw_data).decode()
+    if provider == "elevenlabs":
+        await asyncio.get_event_loop().run_in_executor(
+            None, synthesize_tts_elevenlabs, text, mp3_file, voice_id
+        )
+    elif provider == "polly" and _HAS_AIOBOTO3:
         await _synthesize_tts_polly_async(text, mp3_file, voice_id)
     else:
         await asyncio.get_event_loop().run_in_executor(

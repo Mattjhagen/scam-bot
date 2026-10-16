@@ -48,6 +48,8 @@ class _Settings:
 
         # TTS
         self.TTS_PROVIDER = os.getenv("TTS_PROVIDER", "polly")
+        self.ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
+        self.ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "")
         self.ENABLE_LOCAL_TTS = os.getenv("ENABLE_LOCAL_TTS", "false").lower() == "true"
 
         # Recording

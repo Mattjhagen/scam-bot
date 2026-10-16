@@ -24,7 +24,7 @@ def upgrade() -> None:
     op.create_table('scam_numbers',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('phone_number', sa.String(length=30), nullable=False),
-    sa.Column('scam_type', sa.Enum('TECH_SUPPORT', 'LOTTERY', 'BANK_FRAUD', 'ROMANCE', 'GOVERNMENT', 'BUSINESS_EMAIL', 'INVESTMENT', 'GENERAL', name='scamtype'), nullable=True),
+    sa.Column('scam_type', sa.Enum('tech_support', 'lottery', 'bank_fraud', 'romance', 'government', 'business_email', 'investment', 'general', name='scamtype'), nullable=True),
     sa.Column('caller_name', sa.String(length=200), nullable=True),
     sa.Column('notes', sa.Text(), nullable=True),
     sa.Column('confidence', sa.Float(), nullable=True),
