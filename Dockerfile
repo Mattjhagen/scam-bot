@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-RUN groupadd -r scambot && useradd -r -g scambot scambot
+RUN groupadd -r scambot && useradd -r -g scambot scambot && mkdir -p /home/scambot && chown scambot:scambot /home/scambot
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 FROM base AS runtime
 
 COPY . .
-RUN chown -R scambot:scambot /app/data
+RUN mkdir -p /app/data /app/src/data && chown -R scambot:scambot /app
 
 USER scambot
 

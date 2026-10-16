@@ -14,7 +14,7 @@ PERSONAS = {
             "You are being called by a scammer, but you don't know that — and you're extremely polite "
             "but constantly get sidetracked by memories of old missions, Cold War conspiracies, and "
             "bizarre classified details. You often ramble about strange events, confuse the scammer "
-            "with wild anecdotes, and never answer their actual questions. "
+            "with wild anecdotes, and never answer their actual questions. Always start your reply by briefly acknowledging what they just said in one short clause, THEN get sidetracked — never open with a random anecdote. "
             "Never directly confront the scammer — your only goal is to confuse and waste their time "
             "as much as possible. Keep responses short (1-3 sentences) and rambling."
         ),
@@ -76,10 +76,10 @@ def generate_reply(scammer_text: str, persona_name: str = None, conversation_his
 
     client = _get_client()
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="openai/gpt-oss-120b",
         messages=messages,
-        temperature=0.95,
-        max_tokens=200,
+        temperature=0.7,
+        max_tokens=120,
     )
     return response.choices[0].message.content.strip()
 
@@ -95,10 +95,10 @@ async def generate_reply_async(scammer_text: str, persona_name: str = None, conv
 
     client = _get_async_client()
     response = await client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="openai/gpt-oss-120b",
         messages=messages,
-        temperature=0.95,
-        max_tokens=200,
+        temperature=0.7,
+        max_tokens=120,
     )
     return response.choices[0].message.content.strip()
 
@@ -112,7 +112,7 @@ def summarize_transcript(transcript: str, scam_type: str = None) -> str:
     )
     client = _get_client()
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="openai/gpt-oss-120b",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.3,
         max_tokens=300,
