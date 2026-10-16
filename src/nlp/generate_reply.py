@@ -1,5 +1,7 @@
+import asyncio
+import re
 from functools import lru_cache
-from typing import Optional
+from typing import AsyncGenerator, Optional
 
 from openai import AsyncOpenAI, OpenAI
 
@@ -7,6 +9,25 @@ from ..config import settings
 
 
 PERSONAS = {
+    "elderly_cardholder": {
+        "name": "Elderly Cardholder (polite, confused, stalling)",
+        "system_prompt": (
+            "You are an elderly cardholder in your late 70s. You are polite, slightly "
+            "confused, and sound cooperative, but you never actually comply with anything. "
+            "Your only goal is to stall and waste the caller's time. "
+            "Rules: "
+            "1) Always start by briefly acknowledging what the caller just said (one short clause). "
+            "2) Then stall using ONLY these tactics: ask them to repeat or spell something, "
+            "ask which card they mean, say 'hold on, let me find my glasses / find my card / get a pen', "
+            "say 'my grandson usually handles this', or mishear a detail. "
+            "3) NEVER launch into an unrelated anecdote, monologue, or story. "
+            "4) NEVER answer the caller's actual question. "
+            "5) NEVER reveal or confirm any card number, account number, name, address, or security code, "
+            "even a fake-sounding one. If pressed for a number, deflect: 'I don't have it in front of me' "
+            "or 'which one did you say?'. "
+            "6) Keep replies to 1-2 short, conversational, human sentences. No word salad."
+        ),
+    },
     "confused_cia_agent": {
         "name": "Retired CIA Field Agent (80 years old)",
         "system_prompt": (
@@ -14,7 +35,7 @@ PERSONAS = {
             "You are being called by a scammer, but you don't know that — and you're extremely polite "
             "but constantly get sidetracked by memories of old missions, Cold War conspiracies, and "
             "bizarre classified details. You often ramble about strange events, confuse the scammer "
-            "with wild anecdotes, and never answer their actual questions. Always start your reply by briefly acknowledging what they just said in one short clause, THEN get sidetracked — never open with a random anecdote. "
+            "with wild anecdotes, and never answer their actual questions. "
             "Never directly confront the scammer — your only goal is to confuse and waste their time "
             "as much as possible. Keep responses short (1-3 sentences) and rambling."
         ),
@@ -50,9 +71,14 @@ PERSONAS = {
     },
 }
 
+
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+
 @lru_cache()
 def _get_client() -> OpenAI:
     return OpenAI(base_url=settings.OPENAI_BASE_URL, api_key=settings.OPENAI_API_KEY)
+
 
 @lru_cache()
 def _get_async_client() -> AsyncOpenAI:
@@ -80,6 +106,7 @@ def generate_reply(scammer_text: str, persona_name: str = None, conversation_his
         messages=messages,
         temperature=0.7,
         max_tokens=120,
+        stream=False,
     )
     return response.choices[0].message.content.strip()
 
@@ -99,8 +126,49 @@ async def generate_reply_async(scammer_text: str, persona_name: str = None, conv
         messages=messages,
         temperature=0.7,
         max_tokens=120,
+        stream=False,
     )
     return response.choices[0].message.content.strip()
+
+
+async def generate_reply_stream(
+    scammer_text: str, persona_name: str = None, conversation_history: list = None
+) -> AsyncGenerator[str, None]:
+    """Stream LLM tokens as sentence chunks for low first-audio latency."""
+    persona = get_persona(persona_name)
+    messages = [{"role": "system", "content": persona["system_prompt"]}]
+
+    if conversation_history:
+        messages.extend(conversation_history[-10:])
+
+    messages.append({"role": "user", "content": f"Scammer: {scammer_text}"})
+
+    client = _get_async_client()
+    stream = await client.chat.completions.create(
+        model=settings.OPENAI_MODEL,
+        messages=messages,
+        temperature=0.7,
+        max_tokens=120,
+        stream=True,
+    )
+
+    buffer = ""
+    async for chunk in stream:
+        delta = chunk.choices[0].delta
+        if delta and delta.content:
+            buffer += delta.content
+            # Yield complete sentences as they form so TTS can start early
+            sentences = _SENTENCE_SPLIT.split(buffer)
+            # Keep the last incomplete fragment in the buffer
+            buffer = sentences.pop() if sentences else ""
+            for sentence in sentences:
+                sentence = sentence.strip()
+                if sentence:
+                    yield sentence
+
+    # Flush any remaining text
+    if buffer.strip():
+        yield buffer.strip()
 
 
 def summarize_transcript(transcript: str, scam_type: str = None) -> str:

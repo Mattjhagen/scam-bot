@@ -14,7 +14,7 @@ import audioop
 
 from ..config import settings
 from ..core.models import CallRecord
-from ..nlp import generate_reply_async, transcribe_audio_async
+from ..nlp import generate_reply_async, generate_reply_stream, transcribe_audio_async
 from ..core.tts_engine import synthesize_tts_async, synthesize_tts_to_mulaw
 from ..core import scam_database
 
@@ -206,9 +206,23 @@ async def process_audio_chunk(session: StreamSession):
 async def _generate_and_queue_response(session: StreamSession, transcription: str):
     try:
         persona = settings.DEFAULT_PERSONA
-        reply_text = await generate_reply_async(
+        reply_parts = []
+
+        async for sentence in generate_reply_stream(
             transcription, persona, session.conversation_history
-        )
+        ):
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+            reply_parts.append(sentence)
+
+            # Synthesize each sentence as it arrives so audio starts early
+            output_file = session.get_audio_file("reply_mulaw")
+            mulaw_b64 = await synthesize_tts_to_mulaw(sentence, output_file, persona)
+            session.response_queue.append(mulaw_b64)
+            logger.info("[STREAM] AI sentence: %s...", sentence[:60])
+
+        reply_text = " ".join(reply_parts)
         if not reply_text or not reply_text.strip():
             reply_text = "Hmm? Say that again, sonny, my hearing isn't what it used to be."
 
@@ -219,11 +233,7 @@ async def _generate_and_queue_response(session: StreamSession, transcription: st
         session.conversation_history = session.conversation_history[-MAX_CONVERSATION_HISTORY:]
 
         session.transcript_so_far += f"\nAI ({persona}): {reply_text}"
-
-        output_file = session.get_audio_file("reply_mulaw")
-        mulaw_b64 = await synthesize_tts_to_mulaw(reply_text, output_file, persona)
-        session.response_queue.append(mulaw_b64)
-        logger.info("[STREAM] AI reply: %s...", reply_text[:80])
+        logger.info("[STREAM] AI reply complete: %s...", reply_text[:80])
 
     except Exception as e:
         logger.error("[STREAM] Error generating reply: %s", e)

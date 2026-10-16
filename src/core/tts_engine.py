@@ -4,6 +4,7 @@ import base64
 import hashlib
 import io
 import json
+import logging
 import os
 import urllib.request
 import wave
@@ -14,6 +15,8 @@ from gtts import gTTS
 from pydub import AudioSegment
 
 from ..config import settings, BASE_DIR_STR
+
+logger = logging.getLogger("scambot")
 
 SAMPLE_RATE = 8000
 
@@ -30,7 +33,18 @@ except ImportError:
     PiperVoice = None
     _HAS_PIPER = False
 
+try:
+    from kokoro import KModel, KPipeline
+    _HAS_KOKORO = True
+except ImportError:
+    KModel = None
+    KPipeline = None
+    _HAS_KOKORO = False
+
 _piper_voice = None
+_kokoro_pipeline = None
+_kokoro_model = None
+_kokoro_voice_pack = None
 
 _tts_cache: dict[str, str] = {}
 
@@ -151,6 +165,60 @@ def synthesize_tts_piper(text: str, output_file: str) -> str:
     return output_file
 
 
+def _get_kokoro_pipeline():
+    """Lazy-load Kokoro pipeline. Falls back to Piper if unavailable."""
+    global _kokoro_pipeline, _kokoro_model, _kokoro_voice_pack
+    if _kokoro_pipeline is not None:
+        return _kokoro_pipeline
+    if not _HAS_KOKORO:
+        raise RuntimeError("kokoro is not installed")
+    try:
+        import torch
+        _kokoro_model = KModel()
+        _kokoro_model.eval()
+        _kokoro_pipeline = KPipeline(lang_code="a", model=_kokoro_model)
+        # Default natural American female voice
+        _kokoro_voice_pack = os.getenv("KOKORO_VOICE", "af_heart")
+    except Exception as exc:
+        logger.warning("Kokoro failed to load (%s), falling back to Piper", exc)
+        _kokoro_pipeline = None
+        _kokoro_model = None
+        _kokoro_voice_pack = None
+        raise
+    return _kokoro_pipeline
+
+
+def synthesize_tts_kokoro(text: str, output_file: str, voice_id: str = None) -> str:
+    """Synthesize speech with Kokoro-82M, writing 8kHz mono WAV to output_file."""
+    if not text or not text.strip():
+        raise ValueError("No text to speak")
+    try:
+        pipeline = _get_kokoro_pipeline()
+    except RuntimeError:
+        # Kokoro not installed — fall back to Piper
+        return synthesize_tts_piper(text, output_file)
+
+    voice_id = voice_id or os.getenv("KOKORO_VOICE", "af_heart")
+    import torch
+
+    with torch.inference_mode():
+        for _, _, audio in pipeline(
+            text, voice=voice_id, speed=1.0, split_pattern=r"\n+"
+        ):
+            audio_np = audio.cpu().numpy()
+            break  # Kokoro yields one segment for short text; take first
+
+    # Convert to 16-bit PCM WAV at 8kHz
+    pcm16 = (audio_np * 32767).astype("<i2").tobytes()
+    Path(output_file).parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(output_file, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(24000)  # Kokoro native is 24kHz
+        wf.writeframes(pcm16)
+    return output_file
+
+
 async def synthesize_tts_async(text: str, output_file: str, provider: str = None, voice_id: str = None) -> str:
     provider = provider or settings.TTS_PROVIDER
     key = _cache_key(text, provider, voice_id or "")
@@ -164,6 +232,10 @@ async def synthesize_tts_async(text: str, output_file: str, provider: str = None
     if provider == "elevenlabs":
         result = await asyncio.get_event_loop().run_in_executor(
             None, synthesize_tts_elevenlabs, text, output_file, voice_id
+        )
+    elif provider == "kokoro":
+        result = await asyncio.get_event_loop().run_in_executor(
+            None, synthesize_tts_kokoro, text, output_file, voice_id
         )
     elif provider == "piper":
         result = await asyncio.get_event_loop().run_in_executor(
@@ -211,6 +283,8 @@ def clear_cache():
 async def synthesize_tts_to_mulaw(text: str, output_file: str, persona: str = None) -> str:
     provider = settings.TTS_PROVIDER
     voice_id = settings.ELEVENLABS_VOICE_ID if provider == "elevenlabs" else settings.POLLY_VOICE_ID
+    if provider == "kokoro":
+        voice_id = os.getenv("KOKORO_VOICE", "af_heart")
     key = _cache_key(text, provider, voice_id or "")
 
     cached_b64 = _get_cached_mulaw(key)
@@ -223,6 +297,20 @@ async def synthesize_tts_to_mulaw(text: str, output_file: str, persona: str = No
         wav_file = output_file.replace(".mulaw", ".wav")
         await asyncio.get_event_loop().run_in_executor(
             None, synthesize_tts_piper, text, wav_file
+        )
+        audio = AudioSegment.from_wav(wav_file)
+        audio = audio.set_frame_rate(SAMPLE_RATE).set_channels(1).set_sample_width(2)
+        pcm_data = audio.raw_data
+        mulaw_data = audioop.lin2ulaw(pcm_data, 2)
+        _mulaw_cache_path = _cache_path(key, "mulaw")
+        Path(_mulaw_cache_path).write_bytes(mulaw_data)
+        _tts_cache[f"{key}:mulaw"] = base64.b64encode(mulaw_data).decode()
+        _cleanup_temp_file(wav_file)
+        return base64.b64encode(mulaw_data).decode()
+    if provider == "kokoro":
+        wav_file = output_file.replace(".mulaw", ".wav")
+        await asyncio.get_event_loop().run_in_executor(
+            None, synthesize_tts_kokoro, text, wav_file, voice_id
         )
         audio = AudioSegment.from_wav(wav_file)
         audio = audio.set_frame_rate(SAMPLE_RATE).set_channels(1).set_sample_width(2)

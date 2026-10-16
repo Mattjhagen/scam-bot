@@ -47,9 +47,10 @@ class _Settings:
         self.REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
         # TTS
-        self.TTS_PROVIDER = os.getenv("TTS_PROVIDER", "polly")
+        self.TTS_PROVIDER = os.getenv("TTS_PROVIDER", "kokoro")
         self.ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
         self.ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "")
+        self.KOKORO_VOICE = os.getenv("KOKORO_VOICE", "af_heart")
         self.ENABLE_LOCAL_TTS = os.getenv("ENABLE_LOCAL_TTS", "false").lower() == "true"
 
         # Recording
@@ -69,7 +70,7 @@ class _Settings:
         self.SCAM_REPORT_THRESHOLD = int(os.getenv("SCAM_REPORT_THRESHOLD", "3"))
 
         # Persona
-        self.DEFAULT_PERSONA = os.getenv("DEFAULT_PERSONA", "confused_cia_agent")
+        self.DEFAULT_PERSONA = os.getenv("DEFAULT_PERSONA", "elderly_cardholder")
 
         # Recording retention (days: 0 = never delete)
         self.RECORDING_RETENTION_DAYS = int(os.getenv("RECORDING_RETENTION_DAYS", "30"))
